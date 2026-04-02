@@ -1,3 +1,26 @@
+# LabelImg Custom - Anotación optimizada
+
+## Descripción
+Este proyecto es una versión personalizada de LabelImg, adaptada para mejorar el flujo de etiquetado en proyectos de visión por computadora.
+
+Se realizaron modificaciones en la herramienta para facilitar el manejo de etiquetas y la preparación de datos para modelos YOLO.
+
+## Cambios realizados
+- Modificación del comportamiento de Ctrl+V, ahora Ctrl+Shift+V
+- Ajustes en clases, ahora pueden seleccionarse manteniendo precionado CTRL + Click izquierdo del raton
+- Mejora en flujo de etiquetado
+
+## Propósito
+Herramienta utilizada como para realizar mas como el etiquetado.
+
+## Base del proyecto
+Este proyecto está basado en LabelImg (herramienta open source).
+
+
+---
+
+## Documentación original
+
 .. image:: /readme/images/labelimg.png
         :target: https://github.com/heartexlabs/label-studio
 

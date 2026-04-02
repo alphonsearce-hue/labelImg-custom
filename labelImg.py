@@ -154,6 +154,7 @@ class MainWindow(QMainWindow, WindowMixin):
 
         # Create and add a widget for showing current label items
         self.label_list = QListWidget()
+        self.label_list.setSelectionMode(QAbstractItemView.ExtendedSelection)
         label_list_container = QWidget()
         label_list_container.setLayout(list_layout)
         self.label_list.itemActivated.connect(self.label_selection_changed)
@@ -228,7 +229,7 @@ class MainWindow(QMainWindow, WindowMixin):
 
         open_annotation = action(get_str('openAnnotation'), self.open_annotation_dialog,
                                  'Ctrl+Shift+O', 'open', get_str('openAnnotationDetail'))
-        copy_prev_bounding = action(get_str('copyPrevBounding'), self.copy_previous_bounding_boxes, 'Ctrl+v', 'copy', get_str('copyPrevBounding'))
+        copy_prev_bounding = action(get_str('copyPrevBounding'), self.copy_previous_bounding_boxes, 'Ctrl+Shift+v', 'copy', get_str('copyPrevBounding'))
 
         open_next_image = action(get_str('nextImg'), self.open_next_image,
                                  'd', 'next', get_str('nextImgDetail'))
@@ -750,17 +751,30 @@ class MainWindow(QMainWindow, WindowMixin):
         self.menus.labelList.exec_(self.label_list.mapToGlobal(point))
 
     def edit_label(self):
-        if not self.canvas.editing():
-            return
-        item = self.current_item()
-        if not item:
-            return
-        text = self.label_dialog.pop_up(item.text())
-        if text is not None:
-            item.setText(text)
-            item.setBackground(generate_color_by_text(text))
-            self.set_dirty()
-            self.update_combo_box()
+            if not self.canvas.editing():
+                return
+            item = self.current_item()
+            if not item:
+                return
+            
+            # Muestra el diálogo para escribir el nuevo nombre de la clase
+            text = self.label_dialog.pop_up(item.text())
+            
+            if text is not None:
+                # --- MODIFICACIÓN: Iterar sobre todos los elementos seleccionados ---
+                for selected_item in self.label_list.selectedItems():
+                    selected_item.setText(text)
+                    selected_item.setBackground(generate_color_by_text(text))
+                    
+                    # Actualizar también la figura (shape) correspondiente en el lienzo
+                    shape = self.items_to_shapes[selected_item]
+                    shape.label = text
+                    shape.line_color = generate_color_by_text(text)
+                    shape.fill_color = generate_color_by_text(text)
+                # --------------------------------------------------------------------
+                
+                self.set_dirty()
+                self.update_combo_box()
 
     # Tzutalin 20160906 : Add file list and dock to move faster
     def file_item_double_clicked(self, item=None):
