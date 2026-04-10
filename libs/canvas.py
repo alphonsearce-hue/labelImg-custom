@@ -32,7 +32,7 @@ class Canvas(QWidget):
 
     CREATE, EDIT = list(range(2))
 
-    epsilon = 24.0
+    epsilon = 8.0
 
     def __init__(self, *args, **kwargs):
         super(Canvas, self).__init__(*args, **kwargs)
@@ -41,6 +41,7 @@ class Canvas(QWidget):
         self.shapes = []
         self.current = None
         self.selected_shape = None  # save the selected shape here
+        self.selected_shapes = []  # NUEVO: lista de múltiples selecciones
         self.selected_shape_copy = None
         self.drawing_line_color = QColor(0, 0, 255)
         self.drawing_rect_color = QColor(0, 0, 255)
@@ -219,7 +220,10 @@ class Canvas(QWidget):
         for shape in reversed([s for s in priority_list if self.isVisible(s)]):
             # Look for a nearby vertex to highlight. If that fails,
             # check if we happen to be inside a shape.
-            index = shape.nearest_vertex(pos, self.epsilon)
+
+            epsilon = max(4.0, self.epsilon / self.scale)
+            index = shape.nearest_vertex(pos, epsilon)
+
             if index is not None:
                 if self.selected_vertex():
                     self.h_shape.highlight_clear()
@@ -259,21 +263,21 @@ class Canvas(QWidget):
         pos = self.transform_pos(ev.pos())
 
         if ev.button() == Qt.LeftButton:
+            pos = self.transform_pos(ev.pos())
+
+            multi_select = ev.modifiers() & Qt.ControlModifier
+
             if self.drawing():
                 self.handle_drawing(pos)
             else:
-                selection = self.select_shape_point(pos)
+                selection = self.select_shape_point(pos, multi_select)
                 self.prev_point = pos
 
                 if selection is None:
-                    # pan
                     QApplication.setOverrideCursor(QCursor(Qt.OpenHandCursor))
                     self.pan_initial_pos = ev.pos()
 
-        elif ev.button() == Qt.RightButton and self.editing():
-            self.select_shape_point(pos)
-            self.prev_point = pos
-        self.update()
+            self.update()
 
     def mouseReleaseEvent(self, ev):
         if ev.button() == Qt.RightButton:
@@ -360,20 +364,61 @@ class Canvas(QWidget):
         self.selectionChanged.emit(True)
         self.update()
 
-    def select_shape_point(self, point):
-        """Select the first shape created which contains this point."""
-        self.de_select_shape()
-        if self.selected_vertex():  # A vertex is marked for selection.
-            index, shape = self.h_vertex, self.h_shape
-            shape.highlight_vertex(index, shape.MOVE_VERTEX)
-            self.select_shape(shape)
-            return self.h_vertex
+    def select_shape_point(self, point, multi_select=False):
+        """Selección inteligente con soporte multi-selección (Ctrl)."""
+
+        # Encontrar todas las cajas tocadas
+        cajas_tocadas = []
         for shape in reversed(self.shapes):
             if self.isVisible(shape) and shape.contains_point(point):
-                self.select_shape(shape)
-                self.calculate_offsets(shape, point)
-                return self.selected_shape
-        return None
+                cajas_tocadas.append(shape)
+
+        if not cajas_tocadas:
+            if not multi_select:
+                self.clear_selection()
+            return None
+
+        # Elegir la más cercana al clic (mejor UX que área)
+        mejor_shape = None
+        mejor_dist = float('inf')
+
+        for shape in cajas_tocadas:
+            xs = [p.x() for p in shape.points]
+            ys = [p.y() for p in shape.points]
+
+            cx = sum(xs) / len(xs)
+            cy = sum(ys) / len(ys)
+
+            dist = (cx - point.x())**2 + (cy - point.y())**2
+
+            if dist < mejor_dist:
+                mejor_dist = dist
+                mejor_shape = shape
+
+        if mejor_shape is None:
+            return None
+
+        # --- MULTI SELECCIÓN ---
+        if multi_select:
+            if mejor_shape in self.selected_shapes:
+                mejor_shape.selected = False
+                self.selected_shapes.remove(mejor_shape)
+            else:
+                mejor_shape.selected = True
+                self.selected_shapes.append(mejor_shape)
+        else:
+            self.clear_selection()
+            mejor_shape.selected = True
+            self.selected_shapes = [mejor_shape]
+
+        # Mantener compatibilidad con código viejo
+        self.selected_shape = mejor_shape
+
+        self.calculate_offsets(mejor_shape, point)
+        self.selectionChanged.emit(True)
+        self.update()
+
+        return mejor_shape
 
     def calculate_offsets(self, shape, point):
         rect = shape.bounding_rect()
@@ -463,6 +508,15 @@ class Canvas(QWidget):
             self.selectionChanged.emit(False)
             self.update()
 
+    def clear_selection(self):
+        for shape in self.shapes:
+            shape.selected = False
+
+        self.selected_shapes = []
+        self.selected_shape = None
+
+        self.update()
+
     def delete_selected(self):
         if self.selected_shape:
             shape = self.selected_shape
@@ -517,9 +571,15 @@ class Canvas(QWidget):
         Shape.scale = self.scale
         Shape.label_font_size = self.label_font_size
         for shape in self.shapes:
-            if (shape.selected or not self._hide_background) and self.isVisible(shape):
-                shape.fill = shape.selected or shape == self.h_shape
-                shape.paint(p)
+            if self.isVisible(shape):
+                # NUEVO: considerar múltiples seleccionadas
+                is_selected = shape.selected or shape in getattr(self, 'selected_shapes', [])
+                
+                shape.fill = is_selected or shape == self.h_shape
+                shape.selected = is_selected  # asegurar consistencia visual
+                
+                if is_selected or not self._hide_background:
+                    shape.paint(p)
         if self.current:
             self.current.paint(p)
             self.line.paint(p)
@@ -590,7 +650,8 @@ class Canvas(QWidget):
         # d = distance(p1 - p2)
         # m = (p1-p2).manhattanLength()
         # print "d %.2f, m %d, %.2f" % (d, m, d - m)
-        return distance(p1 - p2) < self.epsilon
+        epsilon = max(5.0, self.epsilon / self.scale)
+        return distance(p1 - p2) < epsilon
 
     # These two, along with a call to adjustSize are required for the
     # scroll area.

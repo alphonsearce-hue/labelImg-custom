@@ -34,7 +34,7 @@ class Shape(object):
     vertex_fill_color = DEFAULT_VERTEX_FILL_COLOR
     h_vertex_fill_color = DEFAULT_HVERTEX_FILL_COLOR
     point_type = P_ROUND
-    point_size = 16
+    point_size = 9
     scale = 1.0
     label_font_size = 8
 
@@ -49,8 +49,8 @@ class Shape(object):
         self._highlight_index = None
         self._highlight_mode = self.NEAR_VERTEX
         self._highlight_settings = {
-            self.NEAR_VERTEX: (4, self.P_ROUND),
-            self.MOVE_VERTEX: (1.5, self.P_SQUARE),
+            self.NEAR_VERTEX: (2, self.P_ROUND),
+            self.MOVE_VERTEX: (1.2, self.P_SQUARE),
         }
 
         self._closed = False
@@ -103,7 +103,10 @@ class Shape(object):
 
             for i, p in enumerate(self.points):
                 line_path.lineTo(p)
-                self.draw_vertex(vertex_path, i)
+
+                # SOLO dibujar vértices si está seleccionada
+                if self.selected and (self._highlight_index == i or self._highlight_index is None):
+                    self.draw_vertex(vertex_path, i)
             if self.is_closed():
                 line_path.lineTo(self.points[0])
 
@@ -135,7 +138,7 @@ class Shape(object):
                 painter.fillPath(line_path, color)
 
     def draw_vertex(self, path, i):
-        d = self.point_size / self.scale
+        d = max(3.0, self.point_size / self.scale)
         shape = self.point_type
         point = self.points[i]
         if i == self._highlight_index:

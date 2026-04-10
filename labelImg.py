@@ -814,17 +814,30 @@ class MainWindow(QMainWindow, WindowMixin):
     def shape_selection_changed(self, selected=False):
         if self._no_selection_slot:
             self._no_selection_slot = False
+            return
+
+        self.label_list.blockSignals(True)
+        self.label_list.clearSelection()
+
+        # NUEVO: soportar múltiples shapes
+        if hasattr(self.canvas, 'selected_shapes') and self.canvas.selected_shapes:
+            for shape in self.canvas.selected_shapes:
+                if shape in self.shapes_to_items:
+                    self.shapes_to_items[shape].setSelected(True)
         else:
             shape = self.canvas.selected_shape
-            if shape:
+            if shape and shape in self.shapes_to_items:
                 self.shapes_to_items[shape].setSelected(True)
-            else:
-                self.label_list.clearSelection()
-        self.actions.delete.setEnabled(selected)
-        self.actions.copy.setEnabled(selected)
-        self.actions.edit.setEnabled(selected)
-        self.actions.shapeLineColor.setEnabled(selected)
-        self.actions.shapeFillColor.setEnabled(selected)
+
+        self.label_list.blockSignals(False)
+
+        items_seleccionados = len(self.label_list.selectedItems()) > 0
+
+        self.actions.delete.setEnabled(items_seleccionados)
+        self.actions.copy.setEnabled(items_seleccionados)
+        self.actions.edit.setEnabled(items_seleccionados)
+        self.actions.shapeLineColor.setEnabled(items_seleccionados)
+        self.actions.shapeFillColor.setEnabled(items_seleccionados)
 
     def add_label(self, shape):
         shape.paint_label = self.display_label_option.isChecked()
@@ -950,13 +963,40 @@ class MainWindow(QMainWindow, WindowMixin):
         self.default_label=self.label_hist[index]
 
     def label_selection_changed(self):
-        item = self.current_item()
-        if item and self.canvas.editing():
-            self._no_selection_slot = True
-            self.canvas.select_shape(self.items_to_shapes[item])
-            shape = self.items_to_shapes[item]
-            # Add Chris
-            self.diffc_button.setChecked(shape.difficult)
+        if not self.canvas.editing():
+            return
+
+        self._no_selection_slot = True
+        self.label_list.blockSignals(True)
+
+        selected_items = self.label_list.selectedItems()
+
+        # Limpiar selección previa en canvas
+        if hasattr(self.canvas, 'clear_selection'):
+            self.canvas.clear_selection()
+
+        shapes = []
+
+        for item in selected_items:
+            shape = self.items_to_shapes.get(item)
+            if shape:
+                shape.selected = True
+                shapes.append(shape)
+
+        # Guardar múltiples selecciones
+        if hasattr(self.canvas, 'selected_shapes'):
+            self.canvas.selected_shapes = shapes
+
+        # Compatibilidad con código viejo
+        if shapes:
+            self.canvas.selected_shape = shapes[0]
+        else:
+            self.canvas.selected_shape = None
+
+        self.label_list.blockSignals(False)
+
+        self.canvas.update()
+        self.canvas.repaint()
 
     def label_item_changed(self, item):
         shape = self.items_to_shapes[item]
@@ -1586,11 +1626,16 @@ class MainWindow(QMainWindow, WindowMixin):
             self.set_dirty()
 
     def delete_selected_shape(self):
-        self.remove_label(self.canvas.delete_selected())
-        self.set_dirty()
-        if self.no_shapes():
-            for action in self.actions.onShapesPresent:
-                action.setEnabled(False)
+        if hasattr(self.canvas, 'selected_shapes') and self.canvas.selected_shapes:
+            for shape in list(self.canvas.selected_shapes):
+                self.canvas.shapes.remove(shape)
+                self.remove_label(shape)
+            self.canvas.clear_selection()
+            self.canvas.update()
+        else:
+            shape = self.canvas.delete_selected()
+            if shape:
+                self.remove_label(shape)
 
     def choose_shape_line_color(self):
         color = self.color_dialog.getColor(self.line_color, u'Choose Line Color',
