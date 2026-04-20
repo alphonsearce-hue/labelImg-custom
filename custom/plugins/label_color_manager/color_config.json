@@ -1,5 +1,6 @@
 {
     "mode": "unified",
     "theme": "retro",
-    "unified_hex": "#ff55ff"
+    "unified_hex": "#000000",
+    "custom_unified_enabled": false
 }

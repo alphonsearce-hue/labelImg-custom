@@ -26,30 +26,37 @@ def setup(main_window):
     global _main_window, _dialog
     _main_window = main_window
 
-    dock_widget = main_window.dock.widget()
-    dock_layout = dock_widget.layout()
+    if hasattr(main_window, "register_plugin_tool"):
+        main_window.register_plugin_tool(
+            "class_tools",
+            "👁 Gestionar Visibilidad por Clase",
+            _abrir_gestor
+        )
+    else:
+        dock_widget = main_window.dock.widget()
+        dock_layout = dock_widget.layout()
 
-    # Creamos un botón elegante para abrir el gestor
-    btn_gestor = QPushButton("👁 Gestionar Visibilidad por Clase")
-    btn_gestor.setStyleSheet("""
-        QPushButton {
-            background-color: #2a2a3e;
-            color: #cba6f7;
-            border: 1px solid #3d3d5c;
-            border-radius: 4px;
-            padding: 8px;
-            font-weight: bold;
-            margin-bottom: 5px;
-        }
-        QPushButton:hover {
-            background-color: #3d3d5c;
-            color: #ffffff;
-        }
-    """)
-    btn_gestor.clicked.connect(_abrir_gestor)
+        # Creamos un botón elegante para abrir el gestor
+        btn_gestor = QPushButton("👁 Gestionar Visibilidad por Clase")
+        btn_gestor.setStyleSheet("""
+            QPushButton {
+                background-color: #2a2a3e;
+                color: #cba6f7;
+                border: 1px solid #3d3d5c;
+                border-radius: 4px;
+                padding: 8px;
+                font-weight: bold;
+                margin-bottom: 5px;
+            }
+            QPushButton:hover {
+                background-color: #3d3d5c;
+                color: #ffffff;
+            }
+        """)
+        btn_gestor.clicked.connect(_abrir_gestor)
 
-    # Insertamos el botón al principio del dock
-    dock_layout.insertWidget(0, btn_gestor)
+        # Insertamos el botón al principio del dock
+        dock_layout.insertWidget(0, btn_gestor)
 
     # Hooks de sincronización
     _parchear_metodo(main_window, 'load_file', _hook_post_load)

@@ -1,6 +1,7 @@
 from PyQt5.QtCore import Qt, QRect
 from PyQt5.QtGui import QColor, QPainter, QPen
 from PyQt5.QtWidgets import QAction, QInputDialog
+from libs.utils import generate_color_by_text
 
 
 __version__ = "2.0.0"
@@ -161,18 +162,31 @@ class MultiSelectAreaPlugin:
         if not selected_class:
             return
 
-        items_to_shapes = getattr(self.mw, "items_to_shapes", {})
+        items_to_shapes = getattr(self.mw, "items_to_shapes", None) or getattr(self.mw, "itemsToShapes", {})
+        touched_items = []
         for shape in shapes:
             shape.label = selected_class
 
         for item, shape in items_to_shapes.items():
             if shape in shapes:
                 item.setText(shape.label)
+                item.setBackground(generate_color_by_text(shape.label))
+                touched_items.append(item)
+
+        label_list = getattr(self.mw, "label_list", None) or getattr(self.mw, "labelList", None)
+        if label_list:
+            label_list.blockSignals(True)
+            label_list.clearSelection()
+            for item in touched_items:
+                item.setSelected(True)
+            label_list.blockSignals(False)
 
         if hasattr(self.mw, "set_dirty"):
             self.mw.set_dirty()
         if hasattr(self.mw, "update_combo_box"):
             self.mw.update_combo_box()
+        if hasattr(self.mw, "shape_selection_changed"):
+            self.mw.shape_selection_changed(True)
 
         self.canvas.update()
 

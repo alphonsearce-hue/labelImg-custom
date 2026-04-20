@@ -139,6 +139,14 @@ class VisualEditorPlugin:
         self._setup_hooks()
 
     def _setup_ui(self):
+        if hasattr(self.main_window, "register_plugin_tool"):
+            self.main_window.register_plugin_tool(
+                "label_mods",
+                "🎨 Personalizar Estilo Visual",
+                self._abrir_editor
+            )
+            return
+
         dock_widget = self.main_window.dock.widget()
         dock_layout = dock_widget.layout()
 

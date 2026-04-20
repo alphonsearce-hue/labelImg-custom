@@ -5,6 +5,7 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
     QAction,
     QButtonGroup,
+    QCheckBox,
     QColorDialog,
     QComboBox,
     QDialog,
@@ -42,6 +43,7 @@ class LabelColorManagerPlugin:
         self.mode = MODE_CLASS
         self.theme = "neon"
         self.unified_hex = "#39FF14"
+        self.custom_unified_enabled = False
         self._instance_color_map = {}
 
         self._original_shape_paint = None
@@ -53,6 +55,14 @@ class LabelColorManagerPlugin:
         self._refresh_visuals()
 
     def _setup_ui(self):
+        if hasattr(self.main_window, "register_plugin_tool"):
+            self.main_window.register_plugin_tool(
+                "label_mods",
+                "🎨 Configuración de Colores",
+                self._open_config_dialog
+            )
+            return
+
         dock_widget = self.main_window.dock.widget()
         dock_layout = dock_widget.layout()
 
@@ -83,13 +93,20 @@ class LabelColorManagerPlugin:
             self.main_window.register_plugin_action("Visualización", action)
 
     def _open_config_dialog(self, checked=False):
-        dialog = ColorManagerDialog(self.main_window, self.mode, self.theme, self.unified_hex)
+        dialog = ColorManagerDialog(
+            self.main_window,
+            self.mode,
+            self.theme,
+            self.unified_hex,
+            self.custom_unified_enabled,
+        )
         if dialog.exec_():
-            selected_mode, selected_theme, selected_unified = dialog.get_values()
+            selected_mode, selected_theme, selected_unified, custom_unified_enabled = dialog.get_values()
 
             self.mode = selected_mode
             self.theme = selected_theme
             self.unified_hex = selected_unified
+            self.custom_unified_enabled = custom_unified_enabled
             self._save_config()
             self._refresh_visuals()
 
@@ -137,7 +154,9 @@ class LabelColorManagerPlugin:
         if not palette:
             return shape.line_color, shape.fill_color
 
-        if self.mode == MODE_INSTANCE:
+        if self.custom_unified_enabled:
+            hex_color = self.unified_hex
+        elif self.mode == MODE_INSTANCE:
             key = id(shape)
             if key not in self._instance_color_map:
                 next_idx = len(self._instance_color_map) % len(palette)
@@ -175,18 +194,21 @@ class LabelColorManagerPlugin:
         mode = data.get("mode", MODE_CLASS)
         theme = data.get("theme", "neon")
         unified_hex = data.get("unified_hex", "#39FF14")
+        custom_unified_enabled = data.get("custom_unified_enabled", False)
 
         if mode in ALL_MODES:
             self.mode = mode
         if theme in COLOR_THEMES:
             self.theme = theme
         self.unified_hex = unified_hex
+        self.custom_unified_enabled = bool(custom_unified_enabled)
 
     def _save_config(self):
         data = {
             "mode": self.mode,
             "theme": self.theme,
             "unified_hex": self.unified_hex,
+            "custom_unified_enabled": self.custom_unified_enabled,
         }
         try:
             with open(self.config_path, "w", encoding="utf-8") as f:
@@ -218,7 +240,7 @@ class ColorManagerDialog(QDialog):
     QPushButton#btn_apply { color: #a6e3a1; border-color: #a6e3a1; }
     """
 
-    def __init__(self, parent, mode, theme, unified_hex):
+    def __init__(self, parent, mode, theme, unified_hex, custom_unified_enabled):
         super().__init__(parent)
         self.setWindowTitle("Configuración de Color de Etiquetas")
         self.setMinimumWidth(540)
@@ -226,6 +248,7 @@ class ColorManagerDialog(QDialog):
         self.mode = mode
         self.theme = theme
         self.unified_hex = unified_hex
+        self.custom_unified_enabled = custom_unified_enabled
         self._build_ui()
         self._sync_ui()
 
@@ -261,6 +284,11 @@ class ColorManagerDialog(QDialog):
         row_unified.addWidget(self.btn_color_wheel)
         layout.addLayout(row_unified)
 
+        self.chk_custom_unified = QCheckBox("Activar color unificado personalizado (prioridad sobre tema)")
+        self.chk_custom_unified.setChecked(self.custom_unified_enabled)
+        self.chk_custom_unified.stateChanged.connect(self._on_custom_unified_toggled)
+        layout.addWidget(self.chk_custom_unified)
+
         self.color_preview = QLabel("      ")
         self.color_preview.setFixedHeight(28)
         self.color_preview.setStyleSheet("border: 1px solid #45475a; border-radius: 4px;")
@@ -284,7 +312,13 @@ class ColorManagerDialog(QDialog):
 
         theme_index = self.theme_combo.findData(self.theme)
         self.theme_combo.setCurrentIndex(theme_index if theme_index >= 0 else 0)
+        self._on_custom_unified_toggled(Qt.Checked if self.custom_unified_enabled else Qt.Unchecked)
         self._refresh_preview()
+
+    def _on_custom_unified_toggled(self, state):
+        enabled = state == Qt.Checked
+        self.btn_color_wheel.setEnabled(enabled)
+        self.color_preview.setEnabled(enabled)
 
     def _refresh_preview(self):
         self.color_preview.setStyleSheet(
@@ -314,5 +348,5 @@ class ColorManagerDialog(QDialog):
         theme = self.theme_combo.currentData()
         if theme not in COLOR_THEMES:
             theme = "neon"
-        return mode, theme, self.unified_hex
+        return mode, theme, self.unified_hex, self.chk_custom_unified.isChecked()
 

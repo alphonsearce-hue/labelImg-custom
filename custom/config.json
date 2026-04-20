@@ -7,5 +7,7 @@
     "plugin_manager": true,
     "precision_cursor": true,
     "robust_autosave": true,
-    "__pycache__": true
+    "__pycache__": true,
+    "multi_bbox_transformer": true,
+    "class_replace_tool": true
 }

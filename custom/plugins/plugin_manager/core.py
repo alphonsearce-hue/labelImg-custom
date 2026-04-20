@@ -137,6 +137,8 @@ def setup(main_window):
 
     if not hasattr(main_window, "_plugin_submenus"):
         main_window._plugin_submenus = {}
+    if not hasattr(main_window, "_plugin_tool_groups"):
+        main_window._plugin_tool_groups = {}
 
     def _get_or_create_plugin_submenu(section_name):
         section = (section_name or "").strip()
@@ -160,8 +162,65 @@ def setup(main_window):
         """API para crear/reutilizar submenús bajo &Plugins."""
         return _get_or_create_plugin_submenu(section_name)
 
+    def _ensure_dock_tool_groups():
+        if main_window._plugin_tool_groups:
+            return
+
+        dock_widget = main_window.dock.widget()
+        dock_layout = dock_widget.layout()
+
+        groups = [
+            ("label_mods", "🎨 Modificación de Etiquetas"),
+            ("class_tools", "🏷 Herramientas de Clases"),
+        ]
+
+        for idx, (group_id, title) in enumerate(groups):
+            button = QPushButton(title)
+            button.setStyleSheet(
+                """
+                QPushButton {
+                    background-color: #1e1e2e;
+                    color: #cba6f7;
+                    border: 1px solid #3d3d5c;
+                    border-radius: 6px;
+                    padding: 10px;
+                    font-weight: bold;
+                    margin-top: 8px;
+                }
+                QPushButton:hover {
+                    background-color: #3d3d5c;
+                    color: #ffffff;
+                }
+                """
+            )
+
+            menu = QMenu(main_window)
+            menu.setStyleSheet(
+                """
+                QMenu { background-color: #1e1e2e; color: #cdd6f4; border: 1px solid #45475a; }
+                QMenu::item { padding: 8px 16px; }
+                QMenu::item:selected { background-color: #313244; color: #a6e3a1; }
+                """
+            )
+            button.clicked.connect(lambda checked=False, b=button, m=menu: m.exec_(b.mapToGlobal(b.rect().bottomLeft())))
+
+            dock_layout.insertWidget(idx, button)
+            main_window._plugin_tool_groups[group_id] = {"button": button, "menu": menu}
+
+    def register_plugin_tool(group_id, title, callback):
+        """Registra una herramienta en los botones agrupados del dock."""
+        _ensure_dock_tool_groups()
+        if group_id not in main_window._plugin_tool_groups:
+            return None
+
+        action = QAction(title, main_window)
+        action.triggered.connect(lambda checked=False, cb=callback: cb())
+        main_window._plugin_tool_groups[group_id]["menu"].addAction(action)
+        return action
+
     main_window.register_plugin_action = register_plugin_action
     main_window.register_plugin_submenu = register_plugin_submenu
+    main_window.register_plugin_tool = register_plugin_tool
 
     action = QAction("⚙️ Gestionar Plugins", main_window)
     action.triggered.connect(lambda: PluginManagerDialog(main_window).exec_())
