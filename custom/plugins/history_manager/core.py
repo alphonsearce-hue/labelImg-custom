@@ -1,12 +1,12 @@
 import json
-
+import os
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QKeySequence
-from PyQt5.QtWidgets import QAction, QShortcut
+from PyQt5.QtWidgets import QAction, QShortcut, QDockWidget, QListWidget, QListWidgetItem, QVBoxLayout, QWidget, QLabel
 
 
-__version__ = "1.0.0"
-__description__ = "Historial global para deshacer/rehacer cambios de anotaciones."
+__version__ = "2.0.0"
+__description__ = "Historial visual de movimientos con soporte para deshacer/rehacer y navegación."
 
 
 def setup(main_window):
@@ -26,6 +26,7 @@ class HistoryManagerPlugin:
         self.redo_stack = []
         self._restoring = False
         self._last_snapshot_key = None
+        self._last_action_desc = "Inicio de sesión"
 
         self.capture_timer = QTimer()
         self.capture_timer.setSingleShot(True)
@@ -35,6 +36,7 @@ class HistoryManagerPlugin:
         self._patch_methods()
 
     def _setup_ui(self):
+        # Acciones de menú
         self.action_undo = QAction("↩ Deshacer", self.mw)
         self.action_redo = QAction("↪ Rehacer", self.mw)
         self.action_undo.triggered.connect(self.undo)
@@ -42,42 +44,83 @@ class HistoryManagerPlugin:
         self.action_undo.setEnabled(False)
         self.action_redo.setEnabled(False)
 
+        # Shortcuts
         QShortcut(QKeySequence("Ctrl+Z"), self.mw, activated=self.undo)
         QShortcut(QKeySequence("Ctrl+Y"), self.mw, activated=self.redo)
         QShortcut(QKeySequence("Ctrl+Shift+Z"), self.mw, activated=self.redo)
 
+        # Registro en el MainWindow (si existe el sistema de registro)
         if hasattr(self.mw, "register_plugin_action"):
             self.mw.register_plugin_action("Edición", self.action_undo)
             self.mw.register_plugin_action("Edición", self.action_redo)
 
-        if hasattr(self.mw, "register_plugin_tool"):
-            self.mw.register_plugin_tool("label_mods", "↩ Deshacer", self.undo)
-            self.mw.register_plugin_tool("label_mods", "↪ Rehacer", self.redo)
+        # Panel de Historial (DockWidget)
+        self.dock = QDockWidget("Historial de Movimientos", self.mw)
+        self.dock.setObjectName("HistoryDock")
+        self.history_list = QListWidget()
+        self.history_list.itemClicked.connect(self._on_history_item_clicked)
+        
+        layout = QVBoxLayout()
+        layout.addWidget(QLabel("Pasos realizados:"))
+        layout.addWidget(self.history_list)
+        
+        container = QWidget()
+        container.setLayout(layout)
+        self.dock.setWidget(container)
+        
+        # Añadir al área de docks de la derecha
+        self.mw.addDockWidget(Qt.RightDockWidgetArea, self.dock)
+        
+        # Botón en el menú de Plugins para mostrar/ocultar el historial
+        toggle_history = QAction("Ver Historial de Movimientos", self.mw)
+        toggle_history.triggered.connect(lambda: self.dock.setVisible(not self.dock.isVisible()))
+        if hasattr(self.mw, "register_plugin_action"):
+            self.mw.register_plugin_action("Plugins", toggle_history)
 
     def _patch_methods(self):
-        original_set_dirty = self.mw.set_dirty
-        original_load_file = self.mw.load_file
+        self.original_set_dirty = self.mw.set_dirty
+        self.original_load_file = self.mw.load_file
+        self.original_delete_selected = self.mw.delete_selected_shape
+        self.original_new_shape = self.mw.new_shape
 
         def wrapped_set_dirty(*args, **kwargs):
-            result = original_set_dirty(*args, **kwargs)
+            result = self.original_set_dirty(*args, **kwargs)
             if not self._restoring:
-                self.capture_timer.start(80)
+                # Si no hay una descripción pendiente, es un movimiento genérico
+                if not self.capture_timer.isActive():
+                    self._last_action_desc = "Cambio detectado"
+                self.capture_timer.start(60) # Reducido a 60ms para más agilidad
             return result
 
         def wrapped_load_file(*args, **kwargs):
-            result = original_load_file(*args, **kwargs)
+            result = self.original_load_file(*args, **kwargs)
             if result:
                 self._reset_history()
+                self._last_action_desc = "Carga de imagen"
                 self._capture_snapshot()
             return result
 
+        def wrapped_delete_selected(*args, **kwargs):
+            self._last_action_desc = "Eliminar cuadro"
+            self.original_delete_selected(*args, **kwargs)
+            self.mw.set_dirty() # Asegurar que se dispare el snapshot
+
+        def wrapped_new_shape(*args, **kwargs):
+            self._last_action_desc = "Crear cuadro"
+            self.original_new_shape(*args, **kwargs)
+            # set_dirty ya es llamado dentro de new_shape
+
+        # Inyectar parches
         self.mw.set_dirty = wrapped_set_dirty
         self.mw.load_file = wrapped_load_file
+        self.mw.delete_selected_shape = wrapped_delete_selected
+        self.mw.new_shape = wrapped_new_shape
 
     def _reset_history(self):
         self.undo_stack = []
         self.redo_stack = []
         self._last_snapshot_key = None
+        self.history_list.clear()
         self._refresh_actions()
 
     def _snapshot(self):
@@ -97,6 +140,7 @@ class HistoryManagerPlugin:
         return {
             "file_path": self.mw.file_path,
             "shapes": shapes,
+            "desc": self._last_action_desc
         }
 
     def _capture_snapshot(self):
@@ -104,15 +148,20 @@ class HistoryManagerPlugin:
             return
 
         state = self._snapshot()
-        key = json.dumps(state, sort_keys=True)
+        # El key no incluye la descripción para detectar si realmente cambiaron las formas
+        data_only = {"f": state["file_path"], "s": state["shapes"]}
+        key = json.dumps(data_only, sort_keys=True)
+        
         if key == self._last_snapshot_key:
             return
 
         self.undo_stack.append(state)
         if len(self.undo_stack) > self.MAX_HISTORY:
             self.undo_stack.pop(0)
+            
         self.redo_stack = []
         self._last_snapshot_key = key
+        self._refresh_history_ui()
         self._refresh_actions()
 
     def _restore_state(self, state):
@@ -151,28 +200,90 @@ class HistoryManagerPlugin:
                     item.setCheckState(Qt.Checked if visible else Qt.Unchecked)
 
             self.canvas.update()
-            self.mw.set_dirty()
+            self.original_set_dirty() # Usamos el original para no disparar otro snapshot
         finally:
             self._restoring = False
 
     def undo(self):
+        # Si hay un snapshot pendiente (timer activo), capturarlo antes de deshacer
+        if self.capture_timer.isActive():
+            self.capture_timer.stop()
+            self._capture_snapshot()
+
         if len(self.undo_stack) <= 1:
             return
+        
         current = self.undo_stack.pop()
         self.redo_stack.append(current)
+        
         previous = self.undo_stack[-1]
-        self._last_snapshot_key = json.dumps(previous, sort_keys=True)
+        data_only = {"f": previous["file_path"], "s": previous["shapes"]}
+        self._last_snapshot_key = json.dumps(data_only, sort_keys=True)
+        
         self._restore_state(previous)
+        self._refresh_history_ui()
         self._refresh_actions()
 
     def redo(self):
         if not self.redo_stack:
             return
+            
         next_state = self.redo_stack.pop()
         self.undo_stack.append(next_state)
-        self._last_snapshot_key = json.dumps(next_state, sort_keys=True)
+        
+        data_only = {"f": next_state["file_path"], "s": next_state["shapes"]}
+        self._last_snapshot_key = json.dumps(data_only, sort_keys=True)
+        
         self._restore_state(next_state)
+        self._refresh_history_ui()
         self._refresh_actions()
+
+    def _on_history_item_clicked(self, item):
+        target_index = self.history_list.row(item)
+        current_index = len(self.undo_stack) - 1
+        
+        if target_index == current_index:
+            return
+            
+        # Navegación rápida saltando pasos
+        if target_index < current_index:
+            # Deshacer múltiples
+            for _ in range(current_index - target_index):
+                state = self.undo_stack.pop()
+                self.redo_stack.append(state)
+        else:
+            # Rehacer múltiples
+            for _ in range(target_index - current_index):
+                state = self.redo_stack.pop()
+                self.undo_stack.append(state)
+        
+        target_state = self.undo_stack[-1]
+        data_only = {"f": target_state["file_path"], "s": target_state["shapes"]}
+        self._last_snapshot_key = json.dumps(data_only, sort_keys=True)
+        
+        self._restore_state(target_state)
+        self._refresh_history_ui()
+        self._refresh_actions()
+
+    def _refresh_history_ui(self):
+        self.history_list.blockSignals(True)
+        self.history_list.clear()
+        
+        # Mostrar todo el stack (undo + redo)
+        for i, state in enumerate(self.undo_stack):
+            item = QListWidgetItem(f"{i+1}. {state['desc']}")
+            self.history_list.addItem(item)
+            if i == len(self.undo_stack) - 1:
+                item.setSelected(True)
+                item.setBackground(Qt.lightGray)
+        
+        for i, state in enumerate(reversed(self.redo_stack)):
+            item = QListWidgetItem(f"(Rehacer) {state['desc']}")
+            item.setForeground(Qt.gray)
+            self.history_list.addItem(item)
+            
+        self.history_list.scrollToBottom()
+        self.history_list.blockSignals(False)
 
     def _refresh_actions(self):
         self.action_undo.setEnabled(len(self.undo_stack) > 1)

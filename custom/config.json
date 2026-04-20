@@ -1,15 +1,17 @@
 {
+    "class_replace_tool": true,
     "class_visibility_manager": true,
     "history_manager": true,
+    "label_color_manager": true,
     "label_exporter": true,
     "line_thickness_manager": true,
-    "label_color_manager": true,
+    "multi_bbox_transformer": true,
     "multi_select_area": true,
+    "navigation_guard": true,
     "plugin_manager": true,
     "precision_cursor": true,
-    "robust_autosave": false,
+    "robust_autosave": true,
     "session_backup_manager": true,
     "__pycache__": true,
-    "multi_bbox_transformer": true,
-    "class_replace_tool": true
+    "propagar_labels": true
 }

@@ -30,6 +30,10 @@ class SessionBackupManagerPlugin:
         self.save_timer.setSingleShot(True)
         self.save_timer.timeout.connect(lambda: self._write_backup(dirty=True))
 
+        self.backup_dir = backup_dir
+        self.backup_path = os.path.join(backup_dir, "working_copy.json")
+        self.last_stable_path = os.path.join(backup_dir, "last_stable_backup.json")
+
         self._patch_methods()
 
     def _patch_methods(self):
@@ -86,7 +90,14 @@ class SessionBackupManagerPlugin:
             "updated_at": datetime.utcnow().isoformat(),
             "snapshot": self._snapshot(),
         }
+        
         try:
+            # Si el archivo actual es "estable" (no dirty), guardarlo como respaldo principal
+            if not dirty:
+                if os.path.exists(self.backup_path):
+                    import shutil
+                    shutil.copy2(self.backup_path, self.last_stable_path)
+            
             with open(self.backup_path, "w", encoding="utf-8") as f:
                 json.dump(payload, f, indent=2)
         except Exception:
@@ -123,6 +134,10 @@ class SessionBackupManagerPlugin:
 
         snapshot = backup.get("snapshot")
         if not snapshot:
+            return False
+
+        # Aseguramos que el path sea el mismo (normalizado)
+        if os.path.normpath(backup.get("file_path", "")) != os.path.normpath(self.mw.file_path):
             return False
 
         self._restore_state(snapshot)
@@ -166,6 +181,13 @@ class SessionBackupManagerPlugin:
 
             self.canvas.update()
             self.mw.set_dirty()
+            
+            # Forzar actualización de la lista de clases para que el usuario vea el cambio
+            if hasattr(self.mw, 'update_combo_box'):
+                self.mw.update_combo_box()
+            
+            # Mostrar mensaje de éxito
+            self.mw.statusBar().showMessage("Respaldo restaurado correctamente.", 3000)
         finally:
             self._restoring = False
 
