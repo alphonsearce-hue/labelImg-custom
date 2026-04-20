@@ -1,11 +1,9 @@
 
-try:
-    from PyQt5.QtGui import *
-    from PyQt5.QtCore import *
-    from PyQt5.QtWidgets import *
-except ImportError:
-    from PyQt4.QtGui import *
-    from PyQt4.QtCore import *
+
+from PyQt5.QtGui import *
+from PyQt5.QtCore import *
+from PyQt5.QtWidgets import *
+
 
 # from PyQt4.QtOpenGL import *
 
@@ -43,8 +41,8 @@ class Canvas(QWidget):
         self.selected_shape = None  # save the selected shape here
         self.selected_shapes = []  # NUEVO: lista de múltiples selecciones
         self.selected_shape_copy = None
-        self.drawing_line_color = QColor(0, 0, 255)
-        self.drawing_rect_color = QColor(0, 0, 255)
+        self.drawing_line_color = QColor(0, 0, 0)
+        self.drawing_rect_color = QColor(0, 0, 0)
         self.line = Shape(line_color=self.drawing_line_color)
         self.prev_point = QPointF()
         self.offsets = QPointF(), QPointF()
@@ -480,24 +478,22 @@ class Canvas(QWidget):
 
     def bounded_move_shape(self, shape, pos):
         if self.out_of_pixmap(pos):
-            return False  # No need to move
-        o1 = pos + self.offsets[0]
-        if self.out_of_pixmap(o1):
-            pos -= QPointF(min(0, o1.x()), min(0, o1.y()))
-        o2 = pos + self.offsets[1]
-        if self.out_of_pixmap(o2):
-            pos += QPointF(min(0, self.pixmap.width() - o2.x()),
-                           min(0, self.pixmap.height() - o2.y()))
-        # The next line tracks the new position of the cursor
-        # relative to the shape, but also results in making it
-        # a bit "shaky" when nearing the border and allows it to
-        # go outside of the shape's area for some reason. XXX
-        # self.calculateOffsets(self.selectedShape, pos)
+            return False
+        
+        # Lógica de límites simplificada para el grupo
         dp = pos - self.prev_point
         if dp:
-            shape.move_by(dp)
+            # Mover todos los seleccionados (soporte para plugin mass_edit)
+            shapes_to_move = getattr(self, 'selected_shapes', [])
+            if not shapes_to_move and shape:
+                shapes_to_move = [shape]
+            
+            for s in shapes_to_move:
+                s.move_by(dp)
+            
             self.prev_point = pos
             return True
+        return False
         return False
 
     def de_select_shape(self):
@@ -575,7 +571,8 @@ class Canvas(QWidget):
                 # NUEVO: considerar múltiples seleccionadas
                 is_selected = shape.selected or shape in getattr(self, 'selected_shapes', [])
                 
-                shape.fill = is_selected or shape == self.h_shape
+                # Forzar relleno visible para que el alpha del plugin funcione en todas
+                shape.fill = True
                 shape.selected = is_selected  # asegurar consistencia visual
                 
                 if is_selected or not self._hide_background:
@@ -799,11 +796,7 @@ class Canvas(QWidget):
     def reset_state(self):
         self.de_select_shape()
         self.un_highlight()
-        self.selected_shape_copy = None
-
-        self.restore_cursor()
-        self.pixmap = None
         self.update()
 
-    def set_drawing_shape_to_square(self, status):
-        self.draw_square = status
+    def set_drawing_shape_to_square(self, value):
+        self.draw_square = value

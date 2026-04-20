@@ -9,20 +9,11 @@ import sys
 import webbrowser as wb
 from functools import partial
 
-try:
-    from PyQt5.QtGui import *
-    from PyQt5.QtCore import *
-    from PyQt5.QtWidgets import *
-except ImportError:
-    # needed for py3+qt4
-    # Ref:
-    # http://pyqt.sourceforge.net/Docs/PyQt4/incompatible_apis.html
-    # http://stackoverflow.com/questions/21217399/pyqt4-qtcore-qvariant-object-instead-of-a-string
-    if sys.version_info.major >= 3:
-        import sip
-        sip.setapi('QVariant', 2)
-    from PyQt4.QtGui import *
-    from PyQt4.QtCore import *
+
+from PyQt5.QtGui import *
+from PyQt5.QtCore import *
+from PyQt5.QtWidgets import *
+
 
 from libs.combobox import ComboBox
 from libs.default_label_combobox import DefaultLabelComboBox
@@ -539,6 +530,17 @@ class MainWindow(QMainWindow, WindowMixin):
         # Open Dir if default file
         if self.file_path and os.path.isdir(self.file_path):
             self.open_dir_dialog(dir_path=self.file_path, silent=True)
+
+        # =====================================================================
+        # SISTEMA DE PLUGINS (Microkernel) — No modificar más allá de estas 3 líneas
+        # El loader se importa aquí (no en el top-level) para evitar que un error
+        # en custom/ bloquee el arranque de la aplicación (aislamiento de fallos).
+        # =====================================================================
+        try:
+            from custom.loader import PluginLoader
+            PluginLoader.load_all(self)
+        except Exception as _plugin_error:
+            print(f"[Plugins] No se pudo inicializar el sistema de plugins: {_plugin_error}")
 
     def keyReleaseEvent(self, event):
         if event.key() == Qt.Key_Control:

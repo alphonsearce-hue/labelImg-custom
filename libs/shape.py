@@ -2,12 +2,9 @@
 # -*- coding: utf-8 -*-
 
 
-try:
-    from PyQt5.QtGui import *
-    from PyQt5.QtCore import *
-except ImportError:
-    from PyQt4.QtGui import *
-    from PyQt4.QtCore import *
+from PyQt5.QtGui import *
+from PyQt5.QtCore import *
+from PyQt5.QtWidgets import *
 
 from libs.utils import distance
 import sys
@@ -25,8 +22,7 @@ class Shape(object):
 
     MOVE_VERTEX, NEAR_VERTEX = range(2)
 
-    # The following class variables influence the drawing
-    # of _all_ shape objects.
+    # --- Atributos de Clase (Configuración Global vía Plugins) ---
     line_color = DEFAULT_LINE_COLOR
     fill_color = DEFAULT_FILL_COLOR
     select_line_color = DEFAULT_SELECT_LINE_COLOR
@@ -37,6 +33,17 @@ class Shape(object):
     point_size = 9
     scale = 1.0
     label_font_size = 8
+    
+    # Nuevos parámetros extendidos
+    line_thickness = 2.0
+    fill_alpha = 128             # 0-255
+    adaptive_thickness = False
+    highlight_selected = True
+    focus_mode = False
+    show_dimensions = False
+    saturation_factor = 1.0  # NUEVO: Factor de saturación (1.0 = normal)
+    sharp_edges = False      # NUEVO: Bordes nítidos (sin antialiasing)
+    dash_style = Qt.SolidLine    # Qt.SolidLine, Qt.DashLine, etc.
 
     def __init__(self, label=None, line_color=None, difficult=False, paint_label=False):
         self.label = label
@@ -56,9 +63,6 @@ class Shape(object):
         self._closed = False
 
         if line_color is not None:
-            # Override the class line_color attribute
-            # with an object attribute. Currently this
-            # is used for drawing the pending line a different color.
             self.line_color = line_color
 
     def close(self):
@@ -86,25 +90,66 @@ class Shape(object):
 
     def paint(self, painter):
         if self.points:
+            # 1. Determinar Color y Opacidad (Focus Mode)
             color = self.select_line_color if self.selected else self.line_color
+            
+            # Focus Mode: Atenuar si NO está seleccionada
+            alpha = 255
+            if Shape.focus_mode and not self.selected:
+                alpha = 60 # 20-30% de opacidad
+            
+            # Aplicar Saturación
+            if Shape.saturation_factor != 1.0:
+                h, s, v, a = color.getHsv()
+                new_s = min(255, int(s * Shape.saturation_factor))
+                color = QColor.fromHsv(h, new_s, v, a)
+
+            # 2. Configurar Pen (Grosor Adaptativo y Highlight)
+            if Shape.sharp_edges:
+                painter.setRenderHint(QPainter.Antialiasing, False)
+            else:
+                painter.setRenderHint(QPainter.Antialiasing, True)
+
             pen = QPen(color)
-            # Try using integer sizes for smoother drawing(?)
-            pen.setWidth(max(1, int(round(2.0 / self.scale))))
+            pen.setStyle(Shape.dash_style)
+            
+            # Asegurar que el borde sea sólido y marcado incluso si el relleno es tenue
+            c_pen = pen.color()
+            c_pen.setAlpha(255) # Borde siempre sólido para máximo contraste
+            pen.setColor(c_pen)
+            
+            thickness = Shape.line_thickness
+            
+            # Highlight de selección: +2px
+            if Shape.highlight_selected and self.selected:
+                thickness += 2.0
+                
+            # Grosor Adaptativo al Zoom
+            # Si scale es pequeña (zoom out), la línea se ve muy gruesa si no compensamos.
+            # Aquí la lógica es mantener la visibilidad.
+            if Shape.adaptive_thickness:
+                # Ajuste empírico para que se vea consistente
+                actual_width = max(1, int(round(thickness * (1.0 / self.scale) ** 0.5)))
+            else:
+                actual_width = max(1, int(round(thickness / self.scale)))
+            
+            pen.setWidth(actual_width)
+            
+            # Aplicar opacidad al pen si está en focus mode
+            if Shape.focus_mode and not self.selected:
+                c = pen.color()
+                c.setAlpha(alpha)
+                pen.setColor(c)
+                
             painter.setPen(pen)
 
             line_path = QPainterPath()
             vertex_path = QPainterPath()
 
             line_path.moveTo(self.points[0])
-            # Uncommenting the following line will draw 2 paths
-            # for the 1st vertex, and make it non-filled, which
-            # may be desirable.
-            # self.drawVertex(vertex_path, 0)
 
             for i, p in enumerate(self.points):
                 line_path.lineTo(p)
-
-                # SOLO dibujar vértices si está seleccionada
                 if self.selected and (self._highlight_index == i or self._highlight_index is None):
                     self.draw_vertex(vertex_path, i)
             if self.is_closed():
@@ -114,28 +159,63 @@ class Shape(object):
             painter.drawPath(vertex_path)
             painter.fillPath(vertex_path, self.vertex_fill_color)
 
-            # Draw text at the top-left
-            if self.paint_label:
-                min_x = sys.maxsize
-                min_y = sys.maxsize
-                min_y_label = int(1.25 * self.label_font_size)
-                for point in self.points:
-                    min_x = min(min_x, point.x())
-                    min_y = min(min_y, point.y())
-                if min_x != sys.maxsize and min_y != sys.maxsize:
-                    font = QFont()
-                    font.setPointSize(self.label_font_size)
-                    font.setBold(True)
-                    painter.setFont(font)
-                    if self.label is None:
-                        self.label = ""
-                    if min_y < min_y_label:
-                        min_y += min_y_label
-                    painter.drawText(int(min_x), int(min_y), self.label)
+            # 3. Dibujar Dimensiones (W x H)
+            if Shape.show_dimensions and self.is_closed() and len(self.points) == 4:
+                self._paint_dimensions(painter)
 
+            # 4. Dibujar Etiqueta
+            if self.paint_label:
+                self._paint_label(painter)
+
+            # 5. Relleno (Alpha dinámico)
             if self.fill:
-                color = self.select_fill_color if self.selected else self.fill_color
-                painter.fillPath(line_path, color)
+                fill_color = self.select_fill_color if self.selected else self.fill_color
+                # Aplicar alpha personalizado del plugin
+                f_color = QColor(fill_color)
+                
+                # Si estamos en focus mode y no seleccionada, alpha extra bajo
+                current_alpha = Shape.fill_alpha
+                if Shape.focus_mode and not self.selected:
+                    current_alpha = int(current_alpha * 0.3)
+                
+                f_color.setAlpha(current_alpha)
+                painter.fillPath(line_path, f_color)
+
+    def _paint_label(self, painter):
+        min_x = sys.maxsize
+        min_y = sys.maxsize
+        min_y_label = int(1.25 * self.label_font_size)
+        for point in self.points:
+            min_x = min(min_x, point.x())
+            min_y = min(min_y, point.y())
+        if min_x != sys.maxsize and min_y != sys.maxsize:
+            font = QFont()
+            font.setPointSize(self.label_font_size)
+            font.setBold(True)
+            painter.setFont(font)
+            if self.label is None:
+                self.label = ""
+            if min_y < min_y_label:
+                min_y += min_y_label
+            painter.drawText(int(min_x), int(min_y), self.label)
+
+    def _paint_dimensions(self, painter):
+        # Calcular W y H
+        min_x = min(p.x() for p in self.points)
+        max_x = max(p.x() for p in self.points)
+        min_y = min(p.y() for p in self.points)
+        max_y = max(p.y() for p in self.points)
+        w = int(max_x - min_x)
+        h = int(max_y - min_y)
+        
+        dim_text = f"{w}x{h}"
+        font = QFont("Consolas", 7)
+        painter.setFont(font)
+        
+        # Dibujar en el centro o inferior derecha
+        rect = painter.fontMetrics().boundingRect(dim_text)
+        painter.setPen(QPen(Qt.white))
+        painter.drawText(int(max_x - rect.width()), int(max_y + rect.height()), dim_text)
 
     def draw_vertex(self, path, i):
         d = max(3.0, self.point_size / self.scale)
@@ -152,8 +232,6 @@ class Shape(object):
             path.addRect(point.x() - d / 2, point.y() - d / 2, d, d)
         elif shape == self.P_ROUND:
             path.addEllipse(point, d / 2.0, d / 2.0)
-        else:
-            assert False, "unsupported vertex shape"
 
     def nearest_vertex(self, point, epsilon):
         index = None
