@@ -11,7 +11,7 @@ import os
 import json
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
-    QTableWidget, QTableWidgetItem, QCheckBox, QHeaderView, QMessageBox, QAction
+    QTableWidget, QTableWidgetItem, QCheckBox, QHeaderView, QMessageBox, QAction, QMenu
 )
 from PyQt5.QtCore import Qt
 
@@ -92,7 +92,13 @@ class PluginManagerDialog(QDialog):
         for i, folder in enumerate(folders):
             # Checkbox
             chk = QCheckBox()
-            chk.setChecked(self.plugins_config.get(folder, True))
+            is_enabled = self.plugins_config.get(folder, True)
+            if folder == "plugin_manager":
+                is_enabled = True
+            chk.setChecked(is_enabled)
+            if folder == "plugin_manager":
+                chk.setEnabled(False)
+                chk.setToolTip("Plugin crítico del sistema. Siempre activo.")
             chk.setStyleSheet("margin-left: 20px;")
             self.tabla.setCellWidget(i, 0, chk)
             
@@ -116,7 +122,7 @@ class PluginManagerDialog(QDialog):
         for i in range(self.tabla.rowCount()):
             folder = self.tabla.item(i, 1).text()
             chk = self.tabla.cellWidget(i, 0)
-            nueva_config[folder] = chk.isChecked()
+            nueva_config[folder] = True if folder == "plugin_manager" else chk.isChecked()
         
         with open(self.config_path, 'w') as f:
             json.dump(nueva_config, f, indent=4)
@@ -125,10 +131,38 @@ class PluginManagerDialog(QDialog):
         self.accept()
 
 def setup(main_window):
-    # Añadir al menú de Plugins de LabelImg
-    if not hasattr(main_window, 'menu_plugins'):
+    # Menú raíz único para el ecosistema de plugins.
+    if not hasattr(main_window, 'menu_plugins') or main_window.menu_plugins is None:
         main_window.menu_plugins = main_window.menuBar().addMenu("&Plugins")
-    
+
+    if not hasattr(main_window, "_plugin_submenus"):
+        main_window._plugin_submenus = {}
+
+    def _get_or_create_plugin_submenu(section_name):
+        section = (section_name or "").strip()
+        if not section:
+            return main_window.menu_plugins
+
+        if section not in main_window._plugin_submenus:
+            submenu = QMenu(section, main_window)
+            main_window.menu_plugins.addMenu(submenu)
+            main_window._plugin_submenus[section] = submenu
+
+        return main_window._plugin_submenus[section]
+
+    def register_plugin_action(section_name, action):
+        """API para que los plugins registren acciones bajo &Plugins."""
+        submenu = _get_or_create_plugin_submenu(section_name)
+        submenu.addAction(action)
+        return action
+
+    def register_plugin_submenu(section_name):
+        """API para crear/reutilizar submenús bajo &Plugins."""
+        return _get_or_create_plugin_submenu(section_name)
+
+    main_window.register_plugin_action = register_plugin_action
+    main_window.register_plugin_submenu = register_plugin_submenu
+
     action = QAction("⚙️ Gestionar Plugins", main_window)
     action.triggered.connect(lambda: PluginManagerDialog(main_window).exec_())
-    main_window.menu_plugins.addAction(action)
+    main_window.register_plugin_action("Administración", action)

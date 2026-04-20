@@ -1,9 +1,11 @@
 {
-    "class_visibility_manager": false,
-    "label_exporter": false,
-    "line_thickness_manager": false,
-    "plugin_manager": false,
-    "precision_cursor": false,
-    "robust_autosave": false,
-    "__pycache__": false
+    "class_visibility_manager": true,
+    "label_exporter": true,
+    "line_thickness_manager": true,
+    "label_color_manager": true,
+    "multi_select_area": true,
+    "plugin_manager": true,
+    "precision_cursor": true,
+    "robust_autosave": true,
+    "__pycache__": true
 }
