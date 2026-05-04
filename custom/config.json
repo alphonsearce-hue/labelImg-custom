@@ -10,8 +10,10 @@
     "navigation_guard": true,
     "plugin_manager": true,
     "precision_cursor": true,
+    "propagar_labels": true,
     "robust_autosave": true,
     "session_backup_manager": true,
     "__pycache__": true,
-    "propagar_labels": true
+    "class_sync": true,
+    "image_jumper": true
 }

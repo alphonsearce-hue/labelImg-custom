@@ -1,6 +1,6 @@
 {
-    "mode": "unified",
-    "theme": "retro",
+    "mode": "class",
+    "theme": "neon",
     "unified_hex": "#000000",
     "custom_unified_enabled": false
 }

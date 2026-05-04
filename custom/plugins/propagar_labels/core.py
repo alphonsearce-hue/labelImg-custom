@@ -215,9 +215,12 @@ class PropagacionDialog(QDialog):
             frames = int(self.txt_frames.text())
             ruta_base = os.path.join(self.selected_folder, archivo_base)
             with open(ruta_base, "r") as f:
-                lineas_base = [l for l in f.readlines() if l.strip() and l.strip().split()[0] in clases_seleccionadas]
+                # Leemos y limpiamos todas las líneas del base
+                lineas_base = [l.strip() for l in f.readlines() if l.strip()]
+                # Filtramos solo las que queremos propagar
+                lineas_a_propagar = [l for l in lineas_base if l.split()[0] in clases_seleccionadas]
             
-            if not lineas_base: return QMessageBox.showinfo("Info", "El archivo base no tiene las clases seleccionadas.")
+            if not lineas_a_propagar: return QMessageBox.information(self, "Info", "El archivo base no tiene las clases seleccionadas.")
             
             all_files = [self.list_files.item(i).text() for i in range(self.list_files.count())]
             idx_base = all_files.index(archivo_base)
@@ -227,10 +230,18 @@ class PropagacionDialog(QDialog):
             for name in targets:
                 path = os.path.join(self.selected_folder, name)
                 if self.cb_backup.isChecked(): shutil.copy2(path, path+".bak")
+                
                 with open(path, "r") as f:
-                    finales = [l for l in f.readlines() if l.strip() and l.strip().split()[0] not in clases_seleccionadas]
+                    # Leemos y limpiamos las líneas del archivo destino
+                    lineas_target = [l.strip() for l in f.readlines() if l.strip()]
+                    # Mantenemos las que NO son de las clases que vamos a sobrescribir
+                    finales = [l for l in lineas_target if l.split()[0] not in clases_seleccionadas]
+                
                 with open(path, "w") as f:
-                    f.writelines(finales + lineas_base)
+                    # Unimos todo con saltos de línea limpios
+                    contenido_final = "\n".join(finales + lineas_a_propagar)
+                    if contenido_final:
+                        f.write(contenido_final + "\n")
                 procesados += 1
             QMessageBox.information(self, "Éxito", f"Clases propagadas en {procesados} archivos.")
         except Exception as e: QMessageBox.critical(self, "Error", str(e))
@@ -247,7 +258,7 @@ class PropagacionDialog(QDialog):
             with open(ruta_base, "r") as f:
                 pers_base = [l.strip().split() for l in f.readlines() if l.strip() and l.strip().split()[0] == CLASE_PERSONA]
             
-            if not pers_base: return QMessageBox.showinfo("Info", "No hay personas (ID 0) en el archivo base.")
+            if not pers_base: return QMessageBox.information(self, "Info", "No hay personas (ID 0) en el archivo base.")
             
             all_files = [self.list_files.item(i).text() for i in range(self.list_files.count())]
             idx_base = all_files.index(archivo_base)
