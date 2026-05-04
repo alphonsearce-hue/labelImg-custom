@@ -14,6 +14,16 @@ from PyQt5.QtGui import *
 from PyQt5.QtCore import *
 from PyQt5.QtWidgets import *
 
+# --- CONFIGURACIÓN DE RUTAS PARA EJECUTABLE (.EXE) ---
+if getattr(sys, 'frozen', False):
+    basedir = os.path.dirname(sys.executable)
+else:
+    basedir = os.path.dirname(os.path.abspath(__file__))
+
+if basedir not in sys.path:
+    sys.path.insert(0, basedir)
+# -----------------------------------------------------
+
 
 from libs.combobox import ComboBox
 from libs.default_label_combobox import DefaultLabelComboBox
@@ -449,7 +459,6 @@ class MainWindow(QMainWindow, WindowMixin):
             open, open_dir, change_save_dir, open_next_image, open_prev_image, save, save_format, None,
             create_mode, edit_mode, None,
             hide_all, show_all)
-
         self.statusBar().showMessage('%s started.' % __appname__)
         self.statusBar().show()
 
@@ -932,7 +941,7 @@ class MainWindow(QMainWindow, WindowMixin):
                     annotation_file_path += TXT_EXT
                 self.label_file.save_yolo_format(annotation_file_path, shapes, self.file_path, self.image_data, self.label_hist,
                                                  self.line_color.getRgb(), self.fill_color.getRgb())
-            elif self.label_file_format == LabelFileFormat.CREATE_ML:
+            elif self.label_file_format == LabelFileFormat.CREATEML:
                 if annotation_file_path[-5:].lower() != ".json":
                     annotation_file_path += JSON_EXT
                 self.label_file.save_create_ml_format(annotation_file_path, shapes, self.file_path, self.image_data,
@@ -1348,6 +1357,7 @@ class MainWindow(QMainWindow, WindowMixin):
                     images.append(path)
         natural_sort(images, key=lambda x: x.lower())
         return images
+
 
     def change_save_dir_dialog(self, _value=False):
         if self.default_save_dir is not None:

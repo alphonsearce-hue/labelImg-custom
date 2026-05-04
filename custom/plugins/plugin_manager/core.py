@@ -34,7 +34,10 @@ class PluginManagerDialog(QDialog):
         self.setMinimumWidth(750)
         self.setMinimumHeight(500)
         self.setStyleSheet(STYLESHEET)
-        self.config_path = os.path.join("custom", "config.json")
+        # Ruta absoluta al archivo config.json (subiendo dos niveles desde core.py)
+        # core.py -> plugin_manager -> plugins -> custom
+        base_custom = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        self.config_path = os.path.join(base_custom, "config.json")
         self.plugins_config = self._load_config()
         self._construir_ui()
 
@@ -85,7 +88,13 @@ class PluginManagerDialog(QDialog):
         layout.addLayout(footer)
 
     def _cargar_tabla(self):
-        plugins_dir = os.path.join("custom", "plugins")
+        # Ruta absoluta a la carpeta de plugins (subiendo un nivel desde core.py -> plugin_manager)
+        plugins_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        
+        if not os.path.exists(plugins_dir):
+            print(f"[PluginManager] No se encontró la carpeta: {plugins_dir}")
+            return
+
         folders = [f for f in os.listdir(plugins_dir) if os.path.isdir(os.path.join(plugins_dir, f))]
         
         self.tabla.setRowCount(len(folders))

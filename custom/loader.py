@@ -27,8 +27,10 @@ class PluginLoader:
     @staticmethod
     def load_all(main_window):
         """Descubre e inicializa plugins desde custom/plugins/."""
-        plugins_dir = os.path.join(os.path.dirname(__file__), "plugins")
-        config_path = os.path.join(os.path.dirname(__file__), "config.json")
+        # Usar ruta absoluta basada en este archivo
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        plugins_dir = os.path.join(base_dir, "plugins")
+        config_path = os.path.join(base_dir, "config.json")
         
         # Cargar configuración de habilitación
         config = {}

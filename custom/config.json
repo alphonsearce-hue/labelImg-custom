@@ -1,7 +1,9 @@
 {
     "class_replace_tool": true,
+    "class_sync": true,
     "class_visibility_manager": true,
     "history_manager": true,
+    "image_jumper": true,
     "label_color_manager": true,
     "label_exporter": true,
     "line_thickness_manager": true,
@@ -13,7 +15,5 @@
     "propagar_labels": true,
     "robust_autosave": true,
     "session_backup_manager": true,
-    "__pycache__": true,
-    "class_sync": true,
-    "image_jumper": true
+    "__pycache__": true
 }
