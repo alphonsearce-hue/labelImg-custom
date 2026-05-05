@@ -1,7 +1,7 @@
 {
   "file_path": "C:\\Users\\megag\\Documents\\Visualizador\\Datos\\Alphaville\\cam_005\\images\\train\\005_tupiniquins_tu_at_20260420T063001_070001Z_frame-008212_time-547.47s.jpg",
   "dirty": false,
-  "updated_at": "2026-05-04T20:01:49.028644",
+  "updated_at": "2026-05-05T15:04:41.935479",
   "snapshot": {
     "file_path": "C:\\Users\\megag\\Documents\\Visualizador\\Datos\\Alphaville\\cam_005\\images\\train\\005_tupiniquins_tu_at_20260420T063001_070001Z_frame-008212_time-547.47s.jpg",
     "shapes": [
@@ -10,14 +10,14 @@
         "points": [
           [
             931.0,
-            513.0
+            506.0
           ],
           [
-            1141.0,
-            513.0
+            1138.0,
+            506.0
           ],
           [
-            1141.0,
+            1138.0,
             715.0
           ],
           [

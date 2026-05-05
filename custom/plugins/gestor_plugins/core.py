@@ -102,10 +102,10 @@ class PluginManagerDialog(QDialog):
             # Checkbox
             chk = QCheckBox()
             is_enabled = self.plugins_config.get(folder, True)
-            if folder == "plugin_manager":
+            if folder == "gestor_plugins":
                 is_enabled = True
             chk.setChecked(is_enabled)
-            if folder == "plugin_manager":
+            if folder == "gestor_plugins":
                 chk.setEnabled(False)
                 chk.setToolTip("Plugin crítico del sistema. Siempre activo.")
             chk.setStyleSheet("margin-left: 20px;")
@@ -131,7 +131,7 @@ class PluginManagerDialog(QDialog):
         for i in range(self.tabla.rowCount()):
             folder = self.tabla.item(i, 1).text()
             chk = self.tabla.cellWidget(i, 0)
-            nueva_config[folder] = True if folder == "plugin_manager" else chk.isChecked()
+            nueva_config[folder] = True if folder == "gestor_plugins" else chk.isChecked()
         
         with open(self.config_path, 'w') as f:
             json.dump(nueva_config, f, indent=4)

@@ -47,7 +47,7 @@ class PluginLoader:
         ]
 
         # El plugin_manager es crítico y siempre se carga primero.
-        plugin_manager_name = "plugin_manager"
+        plugin_manager_name = "gestor_plugins"
         if plugin_manager_name in plugin_names:
             PluginLoader._load_plugin(main_window, plugin_manager_name)
             if plugin_manager_name not in config:
