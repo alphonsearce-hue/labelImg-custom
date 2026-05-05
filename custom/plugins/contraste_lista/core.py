@@ -6,8 +6,8 @@ from PyQt5.QtCore import Qt, QTimer, QModelIndex, QRect
 from PyQt5.QtGui import QColor, QFont, QBrush, QPalette
 from PyQt5.QtWidgets import QListWidget, QStyledItemDelegate, QStyleOptionViewItem, QApplication, QStyle
 
-__version__ = "2.1.1"
-__description__ = "Contraste automático de texto (v2.1.1 Fix Double/Crooked)."
+__version__ = "2.1.3"
+__description__ = "Contraste conservador (Solo blanco en fondos casi negros)."
 
 
 # ----------------------------------------------------------------------
@@ -29,7 +29,8 @@ def _text_color_for(bg: QColor, palette: QPalette = None) -> QColor:
         else:
             return QColor("#ffffff")
 
-    return QColor("#ffffff") if _luminance(bg) < 0.45 else QColor("#111111")
+    # Umbral de luminancia muy bajo: solo colores casi negros activan texto blanco
+    return QColor("#ffffff") if _luminance(bg) < 0.15 else QColor("#111111")
 
 
 # ----------------------------------------------------------------------
@@ -50,16 +51,21 @@ class ContrastDelegate(QStyledItemDelegate):
         option.displayAlignment = Qt.AlignVCenter | Qt.AlignLeft
 
     def paint(self, painter, option: QStyleOptionViewItem, index: QModelIndex):
-        # 1. Calcular color de fondo real (considerando selección)
-        is_selected = option.state & QStyle.State_Selected
-        if is_selected:
-            bg_color = option.palette.color(QPalette.Highlight)
+        # 1. Determinar el color de fondo para el cálculo de contraste
+        # Priorizamos el color de la clase (BackgroundRole) sobre el de selección
+        # porque visualmente el color de clase suele dominar o mezclarse.
+        bg = index.data(Qt.BackgroundRole)
+        if isinstance(bg, QBrush):
+            bg_color = bg.color()
+        elif isinstance(bg, QColor):
+            bg_color = bg
         else:
-            bg = index.data(Qt.BackgroundRole)
-            if isinstance(bg, QBrush):
-                bg_color = bg.color()
-            elif isinstance(bg, QColor):
-                bg_color = bg
+            bg_color = QColor(0, 0, 0, 0)
+
+        # Si el ítem no tiene color de fondo propio, usamos el de selección o el base
+        if bg_color.alpha() < 40:
+            if option.state & QStyle.State_Selected:
+                bg_color = option.palette.color(QPalette.Highlight)
             else:
                 bg_color = option.palette.color(QPalette.Base)
 
