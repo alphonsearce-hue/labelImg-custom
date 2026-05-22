@@ -1,15 +1,20 @@
 {
-    "gestor_plugins": true,
     "colores_etiquetas": true,
     "contraste_lista": true,
+    "cursor_precision": true,
+    "gestor_plugins": true,
     "grosor_lineas": true,
     "historial": true,
+    "mejoras_ux": true,
+    "object_tracker": true,
     "propagar_etiquetas": true,
+    "proteccion_navegacion": true,
     "reemplazar_clases": true,
     "respaldo_sesion": true,
     "saltar_imagenes": true,
     "seleccion_multiple": true,
     "sincronizar_clases": true,
     "transformar_cajas": true,
-    "visibilidad_clases": true
+    "visibilidad_clases": true,
+    "__pycache__": true
 }
