@@ -4,6 +4,7 @@
 
 import os
 import codecs
+import time
 
 from PyQt5.QtCore import QFileSystemWatcher, QTimer
 from PyQt5.QtWidgets import QAction
@@ -26,6 +27,9 @@ class ClassSyncPlugin:
         self._current_watched_file = None
         self._watcher = QFileSystemWatcher()
         self._watcher.fileChanged.connect(self._on_classes_file_changed)
+        self._last_checked_dir = None
+        self._missing_classes_cache = {}
+        self._missing_log_cooldown_sec = 30
 
         self._patch_methods()
         self._add_menu_action()
@@ -71,7 +75,7 @@ class ClassSyncPlugin:
         dir_path = args[0] if args else kwargs.get("dir_path", None)
         print(f"[ClassSync] _after_import_dir -> dir_path={dir_path}")
         if dir_path:
-            self._try_sync_from_dir(dir_path)
+            self._try_sync_from_dir(dir_path, force=True)
 
     def _after_open_dir(self, args, kwargs):
         QTimer.singleShot(300, self._sync_from_last_open_dir)
@@ -85,25 +89,36 @@ class ClassSyncPlugin:
         d = self.main_window.last_open_dir
         print(f"[ClassSync] _sync_from_last_open_dir -> {d}")
         if d and os.path.isdir(d):
-            self._try_sync_from_dir(d)
+            self._try_sync_from_dir(d, force=True)
 
     # ------------------------------------------------------------------
     # Lógica principal
     # ------------------------------------------------------------------
 
-    def _try_sync_from_dir(self, dir_path):
+    def _try_sync_from_dir(self, dir_path, force=False):
         if not dir_path or not os.path.isdir(str(dir_path)):
             print(f"[ClassSync] Carpeta inválida: {dir_path}")
             return
 
-        classes_path = os.path.join(str(dir_path), DATASET_CLASSES_FILENAME)
-        print(f"[ClassSync] Buscando classes.txt en: {classes_path}")
+        norm_dir = os.path.normcase(os.path.abspath(str(dir_path)))
+        classes_path = os.path.join(norm_dir, DATASET_CLASSES_FILENAME)
+
+        # En navegación normal (load_file), no reevaluar la misma carpeta en cada imagen.
+        if not force and norm_dir == self._last_checked_dir:
+            return
+        self._last_checked_dir = norm_dir
 
         if not os.path.isfile(classes_path):
-            print(f"[ClassSync] No encontrado: {classes_path}")
+            now = time.time()
+            last_log = self._missing_classes_cache.get(norm_dir, 0)
+            if force or (now - last_log) >= self._missing_log_cooldown_sec:
+                print(f"[ClassSync] No encontrado: {classes_path}")
+                self._missing_classes_cache[norm_dir] = now
             return
 
         print(f"[ClassSync] Encontrado. Sincronizando...")
+        # Si aparece el archivo, limpiar cache de faltantes para esa carpeta.
+        self._missing_classes_cache.pop(norm_dir, None)
         self._watch_file(classes_path)
         self._sync_classes(classes_path)
 
@@ -152,7 +167,7 @@ class ClassSyncPlugin:
         # 6. Notificar
         folder_name = os.path.basename(os.path.dirname(classes_path))
         self._status(f"✔ {len(classes)} clases cargadas desde '{folder_name}'")
-        print(f"[ClassSync] ✔ Sincronización completa: {classes}")
+        print(f"[ClassSync] [OK] Sincronización completa: {classes}")
 
     def _write_predefined(self, classes):
         try:
@@ -227,7 +242,7 @@ class ClassSyncPlugin:
         print(f"[ClassSync] Sincronización manual. Carpeta: {dir_path}")
 
         if dir_path:
-            self._try_sync_from_dir(dir_path)
+            self._try_sync_from_dir(dir_path, force=True)
         else:
             self._status("[ClassSync] No hay carpeta abierta para sincronizar.")
 
@@ -239,7 +254,10 @@ class ClassSyncPlugin:
         try:
             self.main_window.statusBar().showMessage(message, delay)
         except Exception:
-            print(message)
+            try:
+                print(message)
+            except UnicodeEncodeError:
+                print(message.encode('ascii', 'ignore').decode('ascii'))
 
 
 # ----------------------------------------------------------------------

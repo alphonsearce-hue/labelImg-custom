@@ -1,6 +1,15 @@
 {
-    "mode": "class",
+    "mode": "unified",
     "theme": "sunset",
-    "unified_hex": "#aaff7f",
-    "custom_unified_enabled": false
+    "unified_hex": "#55aaff",
+    "custom_unified_enabled": true,
+    "custom_class_colors_enabled": false,
+    "hover_highlight_enabled": true,
+    "hover_alpha": 90,
+    "class_colors": {
+        "car": "#aa0000",
+        "chair": "#5500ff",
+        "person": "#55ff00",
+        "personas": "#55ffff"
+    }
 }

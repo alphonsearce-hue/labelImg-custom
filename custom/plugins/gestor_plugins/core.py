@@ -7,24 +7,121 @@
 __version__ = "1.1.0"
 __description__ = "Gestor avanzado: Activa/Desactiva todo y recarga el sistema."
 
-import os
 import json
-from PyQt5.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
-    QTableWidget, QTableWidgetItem, QCheckBox, QHeaderView, QMessageBox, QAction, QMenu
-)
+import os
+
 from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QColor
+from PyQt5.QtWidgets import (
+    QAction,
+    QCheckBox,
+    QDialog,
+    QHBoxLayout,
+    QHeaderView,
+    QLabel,
+    QMenu,
+    QMessageBox,
+    QPushButton,
+    QTableWidget,
+    QTableWidgetItem,
+    QVBoxLayout,
+)
 
 # --- Estilos ---
 STYLESHEET = """
-QDialog { background-color: #1a1b26; color: #a9b1d6; }
-QTableWidget { background-color: #24283b; color: #c0caf5; gridline-color: #414868; border-radius: 8px; }
-QHeaderView::section { background-color: #414868; color: #7aa2f7; padding: 10px; font-weight: bold; border: none; }
-QPushButton { background-color: #3d59a1; color: #ffffff; border-radius: 6px; padding: 10px; font-weight: bold; }
-QPushButton:hover { background-color: #7aa2f7; }
-QPushButton#btn_save { background-color: #9ece6a; color: #1a1b26; }
-QPushButton#btn_danger { background-color: #f7768e; color: #ffffff; }
+QDialog {
+    background-color: #0f0f17;
+    color: #ffffff;
+}
+QLabel {
+    color: #ffffff;
+}
+QTableWidget {
+    background-color: #1e1e2e;
+    color: #e0e0e0;
+    gridline-color: #313244;
+    border: 1px solid #45475a;
+    border-radius: 8px;
+}
+QHeaderView::section {
+    background-color: #313244;
+    color: #a6e3a1;
+    padding: 10px;
+    font-weight: bold;
+    border: none;
+}
+QCheckBox {
+    color: #ffffff;
+    spacing: 10px;
+    padding: 5px;
+}
+QCheckBox::indicator {
+    width: 20px;
+    height: 20px;
+    border: 2px solid #a6e3a1;
+    border-radius: 4px;
+    background: #1e1e2e;
+}
+QCheckBox::indicator:checked {
+    background-color: #a6e3a1;
+}
+QTableWidget QCheckBox {
+    margin-left: 20px;
+}
+QPushButton {
+    background-color: #1e1e2e;
+    color: #e0e0e0;
+    border: 1px solid #45475a;
+    border-radius: 6px;
+    padding: 10px;
+    font-weight: bold;
+    font-size: 13px;
+}
+QPushButton:hover {
+    background-color: #313244;
+    color: #ffffff;
+}
+QPushButton#btn_save {
+    background-color: #1e1e2e;
+    color: #a6e3a1;
+    border: 1px solid #a6e3a1;
+}
+QPushButton#btn_save:hover {
+    background-color: #a6e3a1;
+    color: #11111b;
+}
+QPushButton#btn_danger {
+    background-color: #f7768e;
+    color: #ffffff;
+    border: 1px solid #f7768e;
+}
+QPushButton#btn_danger:hover {
+    background-color: #f7768e;
+    color: #11111b;
+}
 """
+
+MENU_STYLESHEET = """
+QMenu {
+    background-color: #0f0f17;
+    color: #e0e0e0;
+    border: 1px solid #313244;
+}
+QMenu::item {
+    padding: 8px 24px;
+}
+QMenu::item:selected {
+    background-color: #a6e3a1;
+    color: #11111b;
+    font-weight: bold;
+}
+QMenu::separator {
+    background-color: #313244;
+    height: 1px;
+    margin: 4px 0px;
+}
+"""
+
 
 class PluginManagerDialog(QDialog):
     def __init__(self, main_window):
@@ -36,22 +133,26 @@ class PluginManagerDialog(QDialog):
         self.setStyleSheet(STYLESHEET)
         # Ruta absoluta al archivo config.json (subiendo dos niveles desde core.py)
         # core.py -> plugin_manager -> plugins -> custom
-        base_custom = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        base_custom = os.path.dirname(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        )
         self.config_path = os.path.join(base_custom, "config.json")
         self.plugins_config = self._load_config()
         self._construir_ui()
 
     def _load_config(self):
         if os.path.exists(self.config_path):
-            with open(self.config_path, 'r') as f:
+            with open(self.config_path, "r") as f:
                 return json.load(f)
         return {}
 
     def _construir_ui(self):
         layout = QVBoxLayout(self)
-        
+
         header = QLabel("🔌 Gestión de Plugins")
-        header.setStyleSheet("font-size: 24px; font-weight: bold; color: #bb9af7; margin-bottom: 10px;")
+        header.setStyleSheet(
+            "font-size: 24px; font-weight: bold; color: #a6e3a1; margin-bottom: 10px;"
+        )
         layout.addWidget(header)
 
         # Botones de Acción Masiva
@@ -67,10 +168,12 @@ class PluginManagerDialog(QDialog):
         # Tabla
         self.tabla = QTableWidget()
         self.tabla.setColumnCount(4)
-        self.tabla.setHorizontalHeaderLabels(["Habilitado", "Nombre del Plugin", "Estado", "Versión"])
+        self.tabla.setHorizontalHeaderLabels(
+            ["Habilitado", "Nombre del Plugin", "Estado", "Versión"]
+        )
         self.tabla.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         layout.addWidget(self.tabla)
-        
+
         self._cargar_tabla()
 
         # Footer
@@ -78,10 +181,10 @@ class PluginManagerDialog(QDialog):
         btn_save = QPushButton("💾 Guardar y Aplicar")
         btn_save.setObjectName("btn_save")
         btn_save.clicked.connect(self._guardar_cambios)
-        
+
         btn_close = QPushButton("Cerrar")
         btn_close.clicked.connect(self.close)
-        
+
         footer.addStretch()
         footer.addWidget(btn_save)
         footer.addWidget(btn_close)
@@ -90,13 +193,21 @@ class PluginManagerDialog(QDialog):
     def _cargar_tabla(self):
         # Ruta absoluta a la carpeta de plugins (subiendo un nivel desde core.py -> plugin_manager)
         plugins_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        
+
         if not os.path.exists(plugins_dir):
             print(f"[PluginManager] No se encontró la carpeta: {plugins_dir}")
             return
 
-        folders = [f for f in os.listdir(plugins_dir) if os.path.isdir(os.path.join(plugins_dir, f))]
-        
+        # Filtrar carpetas válidas (que tengan __init__.py o core.py y no sean __pycache__)
+        folders = []
+        for f in os.listdir(plugins_dir):
+            full_path = os.path.join(plugins_dir, f)
+            if os.path.isdir(full_path) and f != "__pycache__":
+                if os.path.exists(
+                    os.path.join(full_path, "__init__.py")
+                ) or os.path.exists(os.path.join(full_path, "core.py")):
+                    folders.append(f)
+
         self.tabla.setRowCount(len(folders))
         for i, folder in enumerate(folders):
             # Checkbox
@@ -108,41 +219,69 @@ class PluginManagerDialog(QDialog):
             if folder == "gestor_plugins":
                 chk.setEnabled(False)
                 chk.setToolTip("Plugin crítico del sistema. Siempre activo.")
-            chk.setStyleSheet("margin-left: 20px;")
+            # No local stylesheet to prevent overriding the main premium checkbox styles.
             self.tabla.setCellWidget(i, 0, chk)
-            
+
             # Nombre
-            self.tabla.setItem(i, 1, QTableWidgetItem(folder))
-            
+            item_name = QTableWidgetItem(folder)
+            item_name.setFlags(item_name.flags() ^ Qt.ItemIsEditable)
+            self.tabla.setItem(i, 1, item_name)
+
             # Estado (solo lectura para esta sesión)
-            status = "activo" if hasattr(self.main_window, f"_{folder}") else "inactivo"
-            self.tabla.setItem(i, 2, QTableWidgetItem(status))
-            
+            loaded_plugins = getattr(self.main_window, "_loaded_plugins", set())
+            is_active = (
+                folder in loaded_plugins
+                or hasattr(self.main_window, f"_{folder}")
+                or any(folder in str(p) for p in loaded_plugins)
+            )
+
+            status_text = "activo" if is_active else "inactivo"
+            item_status = QTableWidgetItem(status_text)
+            item_status.setFlags(item_status.flags() ^ Qt.ItemIsEditable)
+            if is_active:
+                item_status.setForeground(QColor("#a6e3a1"))  # Premium Green
+            else:
+                item_status.setForeground(QColor("#6c7086"))  # Premium Muted Gray
+            self.tabla.setItem(i, 2, item_status)
+
             # Versión (si existe)
             self.tabla.setItem(i, 3, QTableWidgetItem("1.0.0"))
 
     def _set_all_states(self, state):
         for i in range(self.tabla.rowCount()):
             chk = self.tabla.cellWidget(i, 0)
-            if chk: chk.setChecked(state)
+            if chk:
+                chk.setChecked(state)
 
     def _guardar_cambios(self):
         nueva_config = {}
         for i in range(self.tabla.rowCount()):
             folder = self.tabla.item(i, 1).text()
             chk = self.tabla.cellWidget(i, 0)
-            nueva_config[folder] = True if folder == "gestor_plugins" else chk.isChecked()
-        
-        with open(self.config_path, 'w') as f:
+            nueva_config[folder] = (
+                True if folder == "gestor_plugins" else chk.isChecked()
+            )
+
+        with open(self.config_path, "w") as f:
             json.dump(nueva_config, f, indent=4)
-        
-        QMessageBox.information(self, "Plugins", "Configuración guardada.\nPor favor, reinicia LabelImg para aplicar los cambios.")
+
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Plugins")
+        msg.setText(
+            "Configuración guardada.\nPor favor, reinicia LabelImg para aplicar los cambios."
+        )
+        msg.setIcon(QMessageBox.Information)
+        msg.setStyleSheet(STYLESHEET)
+        msg.exec_()
+
         self.accept()
+
 
 def setup(main_window):
     # Menú raíz único para el ecosistema de plugins.
-    if not hasattr(main_window, 'menu_plugins') or main_window.menu_plugins is None:
+    if not hasattr(main_window, "menu_plugins") or main_window.menu_plugins is None:
         main_window.menu_plugins = main_window.menuBar().addMenu("&Plugins")
+        main_window.menu_plugins.setStyleSheet(MENU_STYLESHEET)
 
     if not hasattr(main_window, "_plugin_submenus"):
         main_window._plugin_submenus = {}
@@ -156,6 +295,7 @@ def setup(main_window):
 
         if section not in main_window._plugin_submenus:
             submenu = QMenu(section, main_window)
+            submenu.setStyleSheet(MENU_STYLESHEET)
             main_window.menu_plugins.addMenu(submenu)
             main_window._plugin_submenus[section] = submenu
 
@@ -189,29 +329,27 @@ def setup(main_window):
                 """
                 QPushButton {
                     background-color: #1e1e2e;
-                    color: #cba6f7;
-                    border: 1px solid #3d3d5c;
+                    color: #a6e3a1;
+                    border: 1px solid #a6e3a1;
                     border-radius: 6px;
                     padding: 10px;
                     font-weight: bold;
                     margin-top: 8px;
                 }
                 QPushButton:hover {
-                    background-color: #3d3d5c;
-                    color: #ffffff;
+                    background-color: #a6e3a1;
+                    color: #11111b;
                 }
                 """
             )
 
             menu = QMenu(main_window)
-            menu.setStyleSheet(
-                """
-                QMenu { background-color: #1e1e2e; color: #cdd6f4; border: 1px solid #45475a; }
-                QMenu::item { padding: 8px 16px; }
-                QMenu::item:selected { background-color: #313244; color: #a6e3a1; }
-                """
+            menu.setStyleSheet(MENU_STYLESHEET)
+            button.clicked.connect(
+                lambda checked=False, b=button, m=menu: m.exec_(
+                    b.mapToGlobal(b.rect().bottomLeft())
+                )
             )
-            button.clicked.connect(lambda checked=False, b=button, m=menu: m.exec_(b.mapToGlobal(b.rect().bottomLeft())))
 
             dock_layout.insertWidget(idx, button)
             main_window._plugin_tool_groups[group_id] = {"button": button, "menu": menu}

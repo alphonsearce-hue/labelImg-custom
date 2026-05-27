@@ -27,6 +27,7 @@ class HistoryManagerPlugin:
         self._restoring = False
         self._last_snapshot_key = None
         self._last_action_desc = "Inicio de sesión"
+        self._shape_moved_connected = False
 
         self.capture_timer = QTimer()
         self.capture_timer.setSingleShot(True)
@@ -89,7 +90,7 @@ class HistoryManagerPlugin:
                 # Si no hay una descripción pendiente, es un movimiento genérico
                 if not self.capture_timer.isActive():
                     self._last_action_desc = "Cambio detectado"
-                self.capture_timer.start(60) # Reducido a 60ms para más agilidad
+                self.capture_timer.start(120)
             return result
 
         def wrapped_load_file(*args, **kwargs):
@@ -97,7 +98,8 @@ class HistoryManagerPlugin:
             if result:
                 self._reset_history()
                 self._last_action_desc = "Carga de imagen"
-                self._capture_snapshot()
+                # Diferir el snapshot pesado al siguiente tick: la UI puede pintar antes.
+                QTimer.singleShot(0, self._capture_snapshot)
             return result
 
         def wrapped_delete_selected(*args, **kwargs):
@@ -115,6 +117,18 @@ class HistoryManagerPlugin:
         self.mw.load_file = wrapped_load_file
         self.mw.delete_selected_shape = wrapped_delete_selected
         self.mw.new_shape = wrapped_new_shape
+
+        # Respaldo explícito: si hay movimiento/redimensión de caja,
+        # marcamos acción específica y programamos captura.
+        if not self._shape_moved_connected and hasattr(self.canvas, "shapeMoved"):
+            self.canvas.shapeMoved.connect(self._on_shape_moved)
+            self._shape_moved_connected = True
+
+    def _on_shape_moved(self):
+        if self._restoring:
+            return
+        self._last_action_desc = "Mover/redimensionar cuadro"
+        self.capture_timer.start(120)
 
     def _reset_history(self):
         self.undo_stack = []
@@ -143,14 +157,60 @@ class HistoryManagerPlugin:
             "desc": self._last_action_desc
         }
 
+    @staticmethod
+    def _bbox_from_points(points):
+        if not points:
+            return 0.0, 0.0, 0.0, 0.0
+        xs = [float(p[0]) for p in points]
+        ys = [float(p[1]) for p in points]
+        min_x, max_x = min(xs), max(xs)
+        min_y, max_y = min(ys), max(ys)
+        return min_x, min_y, max_x - min_x, max_y - min_y
+
+    def _infer_action_desc(self, prev_shapes, curr_shapes):
+        # Sin cambios estructurales, solo geometría: detectar movimiento / tamaño.
+        if len(prev_shapes) != len(curr_shapes):
+            return self._last_action_desc
+
+        moved = False
+        resized = False
+
+        for prev, curr in zip(prev_shapes, curr_shapes):
+            if (prev.get("label", "") != curr.get("label", "") or
+                    bool(prev.get("visible", True)) != bool(curr.get("visible", True))):
+                return self._last_action_desc
+
+            px, py, pw, ph = self._bbox_from_points(prev.get("points", []))
+            cx, cy, cw, ch = self._bbox_from_points(curr.get("points", []))
+
+            prev_center = (px + pw / 2.0, py + ph / 2.0)
+            curr_center = (cx + cw / 2.0, cy + ch / 2.0)
+
+            if abs(prev_center[0] - curr_center[0]) > 0.01 or abs(prev_center[1] - curr_center[1]) > 0.01:
+                moved = True
+            if abs(pw - cw) > 0.01 or abs(ph - ch) > 0.01:
+                resized = True
+
+        if moved and resized:
+            return "Mover y redimensionar cuadro"
+        if resized:
+            return "Redimensionar cuadro"
+        if moved:
+            return "Mover cuadro"
+        return self._last_action_desc
+
     def _capture_snapshot(self):
         if not self.mw.file_path or self._restoring:
             return
 
         state = self._snapshot()
+        if self.undo_stack and self._last_action_desc in ("Cambio detectado", "Mover/redimensionar cuadro"):
+            prev_shapes = self.undo_stack[-1].get("shapes", [])
+            state["desc"] = self._infer_action_desc(prev_shapes, state["shapes"])
+
         # El key no incluye la descripción para detectar si realmente cambiaron las formas
         data_only = {"f": state["file_path"], "s": state["shapes"]}
-        key = json.dumps(data_only, sort_keys=True)
+        key = json.dumps(data_only, sort_keys=True, separators=(",", ":"))
         
         if key == self._last_snapshot_key:
             return
@@ -218,7 +278,7 @@ class HistoryManagerPlugin:
         
         previous = self.undo_stack[-1]
         data_only = {"f": previous["file_path"], "s": previous["shapes"]}
-        self._last_snapshot_key = json.dumps(data_only, sort_keys=True)
+        self._last_snapshot_key = json.dumps(data_only, sort_keys=True, separators=(",", ":"))
         
         self._restore_state(previous)
         self._refresh_history_ui()
@@ -232,7 +292,7 @@ class HistoryManagerPlugin:
         self.undo_stack.append(next_state)
         
         data_only = {"f": next_state["file_path"], "s": next_state["shapes"]}
-        self._last_snapshot_key = json.dumps(data_only, sort_keys=True)
+        self._last_snapshot_key = json.dumps(data_only, sort_keys=True, separators=(",", ":"))
         
         self._restore_state(next_state)
         self._refresh_history_ui()
@@ -259,7 +319,7 @@ class HistoryManagerPlugin:
         
         target_state = self.undo_stack[-1]
         data_only = {"f": target_state["file_path"], "s": target_state["shapes"]}
-        self._last_snapshot_key = json.dumps(data_only, sort_keys=True)
+        self._last_snapshot_key = json.dumps(data_only, sort_keys=True, separators=(",", ":"))
         
         self._restore_state(target_state)
         self._refresh_history_ui()

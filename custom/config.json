@@ -5,7 +5,7 @@
     "gestor_plugins": true,
     "grosor_lineas": true,
     "historial": true,
-    "mejoras_ux": true,
+    "multi_copy": true,
     "object_tracker": true,
     "propagar_etiquetas": true,
     "proteccion_navegacion": true,
@@ -15,6 +15,5 @@
     "seleccion_multiple": true,
     "sincronizar_clases": true,
     "transformar_cajas": true,
-    "visibilidad_clases": true,
-    "__pycache__": true
+    "visibilidad_clases": true
 }

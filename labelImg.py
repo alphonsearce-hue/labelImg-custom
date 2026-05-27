@@ -861,7 +861,10 @@ class MainWindow(QMainWindow, WindowMixin):
         self.label_list.addItem(item)
         for action in self.actions.onShapesPresent:
             action.setEnabled(True)
-        self.update_combo_box()
+        # Optimización: durante carga masiva de etiquetas, evitar recalcular el
+        # combobox en cada add_label (esto escala muy mal con muchas cajas).
+        if not getattr(self, "_bulk_loading_labels", False):
+            self.update_combo_box()
 
     def remove_label(self, shape):
         if shape is None:
@@ -874,32 +877,38 @@ class MainWindow(QMainWindow, WindowMixin):
         self.update_combo_box()
 
     def load_labels(self, shapes):
+        self._bulk_loading_labels = True
         s = []
-        for label, points, line_color, fill_color, difficult in shapes:
-            shape = Shape(label=label)
-            for x, y in points:
+        try:
+            for label, points, line_color, fill_color, difficult in shapes:
+                shape = Shape(label=label)
+                for x, y in points:
 
-                # Ensure the labels are within the bounds of the image. If not, fix them.
-                x, y, snapped = self.canvas.snap_point_to_canvas(x, y)
-                if snapped:
-                    self.set_dirty()
+                    # Ensure the labels are within the bounds of the image. If not, fix them.
+                    x, y, snapped = self.canvas.snap_point_to_canvas(x, y)
+                    if snapped:
+                        self.set_dirty()
 
-                shape.add_point(QPointF(x, y))
-            shape.difficult = difficult
-            shape.close()
-            s.append(shape)
+                    shape.add_point(QPointF(x, y))
+                shape.difficult = difficult
+                shape.close()
+                s.append(shape)
 
-            if line_color:
-                shape.line_color = QColor(*line_color)
-            else:
-                shape.line_color = generate_color_by_text(label)
+                if line_color:
+                    shape.line_color = QColor(*line_color)
+                else:
+                    shape.line_color = generate_color_by_text(label)
 
-            if fill_color:
-                shape.fill_color = QColor(*fill_color)
-            else:
-                shape.fill_color = generate_color_by_text(label)
+                if fill_color:
+                    shape.fill_color = QColor(*fill_color)
+                else:
+                    shape.fill_color = generate_color_by_text(label)
 
-            self.add_label(shape)
+                self.add_label(shape)
+        finally:
+            self._bulk_loading_labels = False
+
+        # Un solo update al final (en lugar de N veces).
         self.update_combo_box()
         self.canvas.load_shapes(s)
 

@@ -42,13 +42,30 @@ QComboBox { background-color: #1e1e2e; color: #ffffff; border: 1px solid #45475a
 """
 
 class VisualEditorDialog(QDialog):
-    def __init__(self, parent=None, config=None):
+    def __init__(self, parent=None, config=None, on_change=None):
         super().__init__(parent)
         self.setWindowTitle("Configuración de Estilo Visual")
         self.setMinimumWidth(480)
         self.setStyleSheet(STYLESHEET)
         self.config = config or {}
+        self.on_change = on_change
         self._construir_ui()
+        self._connect_signals()
+
+    def _connect_signals(self):
+        self.slider_thickness.valueChanged.connect(self._trigger_change)
+        self.slider_alpha.valueChanged.connect(self._trigger_change)
+        self.slider_sat.valueChanged.connect(self._trigger_change)
+        self.combo_style.currentIndexChanged.connect(self._trigger_change)
+        self.chk_sharp.stateChanged.connect(self._trigger_change)
+        self.chk_adaptive.stateChanged.connect(self._trigger_change)
+        self.chk_highlight.stateChanged.connect(self._trigger_change)
+        self.chk_focus.stateChanged.connect(self._trigger_change)
+        self.chk_dims.stateChanged.connect(self._trigger_change)
+
+    def _trigger_change(self):
+        if self.on_change:
+            self.on_change(self.get_values())
 
     def _construir_ui(self):
         layout = QVBoxLayout(self)
@@ -172,11 +189,21 @@ class VisualEditorPlugin:
             self.main_window.zoom_widget.valueChanged.connect(self.main_window.canvas.update)
 
     def _abrir_editor(self):
-        dialog = VisualEditorDialog(self.main_window, self.config)
+        original_config = self.config.copy()
+
+        def on_change(new_config):
+            self._aplicar_config(new_config)
+            self.main_window.canvas.update()
+
+        dialog = VisualEditorDialog(self.main_window, self.config, on_change=on_change)
         if dialog.exec_():
             self.config = dialog.get_values()
             self._aplicar_config(self.config)
             self.save_config()
+            self.main_window.canvas.update()
+        else:
+            self.config = original_config
+            self._aplicar_config(self.config)
             self.main_window.canvas.update()
 
     def _aplicar_config(self, cfg):
