@@ -1,9 +1,360 @@
 {
-  "file_path": "C:\\Users\\megag\\Documents\\Visualizador\\Datos\\Unico\\frames\\amostra_camera_128_20250220_12h00m_14h00m\\amostra_camera_128_20250220_12h00m_14h00m_000001.jpg",
+  "file_path": "C:\\Users\\megag\\Documents\\Visualizador\\Datos\\Gicsa\\set2_practicas_L\\gicsa_cam038_20260515T150357_000023.jpg",
   "dirty": false,
-  "updated_at": "2026-05-27T00:11:11.846659",
+  "updated_at": "2026-05-29T17:02:08.243335",
   "snapshot": {
-    "file_path": "C:\\Users\\megag\\Documents\\Visualizador\\Datos\\Unico\\frames\\amostra_camera_128_20250220_12h00m_14h00m\\amostra_camera_128_20250220_12h00m_14h00m_000001.jpg",
-    "shapes": []
+    "file_path": "C:\\Users\\megag\\Documents\\Visualizador\\Datos\\Gicsa\\set2_practicas_L\\gicsa_cam038_20260515T150357_000023.jpg",
+    "shapes": [
+      {
+        "label": "car",
+        "points": [
+          [
+            381.0,
+            267.0
+          ],
+          [
+            1622.0,
+            267.0
+          ],
+          [
+            1622.0,
+            1330.0
+          ],
+          [
+            381.0,
+            1330.0
+          ]
+        ],
+        "line_color": [
+          51,
+          154,
+          240,
+          255
+        ],
+        "fill_color": [
+          51,
+          154,
+          240,
+          120
+        ],
+        "difficult": false,
+        "visible": true
+      },
+      {
+        "label": "car",
+        "points": [
+          [
+            1569.0,
+            140.0
+          ],
+          [
+            2010.0,
+            140.0
+          ],
+          [
+            2010.0,
+            320.0
+          ],
+          [
+            1569.0,
+            320.0
+          ]
+        ],
+        "line_color": [
+          51,
+          154,
+          240,
+          255
+        ],
+        "fill_color": [
+          51,
+          154,
+          240,
+          120
+        ],
+        "difficult": false,
+        "visible": true
+      },
+      {
+        "label": "car",
+        "points": [
+          [
+            171.0,
+            217.0
+          ],
+          [
+            1007.0,
+            217.0
+          ],
+          [
+            1007.0,
+            779.0
+          ],
+          [
+            171.0,
+            779.0
+          ]
+        ],
+        "line_color": [
+          51,
+          154,
+          240,
+          255
+        ],
+        "fill_color": [
+          51,
+          154,
+          240,
+          120
+        ],
+        "difficult": false,
+        "visible": true
+      },
+      {
+        "label": "car",
+        "points": [
+          [
+            948.0,
+            105.0
+          ],
+          [
+            1281.0,
+            105.0
+          ],
+          [
+            1281.0,
+            241.0
+          ],
+          [
+            948.0,
+            241.0
+          ]
+        ],
+        "line_color": [
+          51,
+          154,
+          240,
+          255
+        ],
+        "fill_color": [
+          51,
+          154,
+          240,
+          120
+        ],
+        "difficult": false,
+        "visible": true
+      },
+      {
+        "label": "car",
+        "points": [
+          [
+            1349.0,
+            121.0
+          ],
+          [
+            1686.0,
+            121.0
+          ],
+          [
+            1686.0,
+            281.0
+          ],
+          [
+            1349.0,
+            281.0
+          ]
+        ],
+        "line_color": [
+          51,
+          154,
+          240,
+          255
+        ],
+        "fill_color": [
+          51,
+          154,
+          240,
+          120
+        ],
+        "difficult": false,
+        "visible": true
+      },
+      {
+        "label": "car",
+        "points": [
+          [
+            119.0,
+            177.0
+          ],
+          [
+            751.0,
+            177.0
+          ],
+          [
+            751.0,
+            607.0
+          ],
+          [
+            119.0,
+            607.0
+          ]
+        ],
+        "line_color": [
+          51,
+          154,
+          240,
+          255
+        ],
+        "fill_color": [
+          51,
+          154,
+          240,
+          120
+        ],
+        "difficult": false,
+        "visible": true
+      },
+      {
+        "label": "car",
+        "points": [
+          [
+            2396.0,
+            195.0
+          ],
+          [
+            2556.0,
+            195.0
+          ],
+          [
+            2556.0,
+            313.0
+          ],
+          [
+            2396.0,
+            313.0
+          ]
+        ],
+        "line_color": [
+          51,
+          154,
+          240,
+          255
+        ],
+        "fill_color": [
+          51,
+          154,
+          240,
+          120
+        ],
+        "difficult": false,
+        "visible": true
+      },
+      {
+        "label": "car",
+        "points": [
+          [
+            1306.0,
+            111.0
+          ],
+          [
+            1472.0,
+            111.0
+          ],
+          [
+            1472.0,
+            207.0
+          ],
+          [
+            1306.0,
+            207.0
+          ]
+        ],
+        "line_color": [
+          51,
+          154,
+          240,
+          255
+        ],
+        "fill_color": [
+          51,
+          154,
+          240,
+          120
+        ],
+        "difficult": false,
+        "visible": true
+      },
+      {
+        "label": "car",
+        "points": [
+          [
+            821.0,
+            128.0
+          ],
+          [
+            972.0,
+            128.0
+          ],
+          [
+            972.0,
+            217.0
+          ],
+          [
+            821.0,
+            217.0
+          ]
+        ],
+        "line_color": [
+          51,
+          154,
+          240,
+          255
+        ],
+        "fill_color": [
+          51,
+          154,
+          240,
+          120
+        ],
+        "difficult": false,
+        "visible": true
+      },
+      {
+        "label": "car",
+        "points": [
+          [
+            734.0,
+            122.0
+          ],
+          [
+            879.0,
+            122.0
+          ],
+          [
+            879.0,
+            215.0
+          ],
+          [
+            734.0,
+            215.0
+          ]
+        ],
+        "line_color": [
+          51,
+          154,
+          240,
+          255
+        ],
+        "fill_color": [
+          51,
+          154,
+          240,
+          120
+        ],
+        "difficult": false,
+        "visible": true
+      }
+    ]
   }
 }

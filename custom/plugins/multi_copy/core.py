@@ -70,6 +70,15 @@ class MultiCopyPlugin:
         safe_multi_copy._multi_copy_patched = True
         self.mw.copy_selected_shape = safe_multi_copy
 
+        # Desconectar el triggered original de self.mw.actions.copy y reconectarlo
+        # a la versión parchada para que el shortcut Ctrl+D nativo y el botón
+        # de la barra de herramientas funcionen con multi-copia
+        try:
+            self.mw.actions.copy.triggered.disconnect()
+        except TypeError:
+            pass
+        self.mw.actions.copy.triggered.connect(self.mw.copy_selected_shape)
+
     def _copy_multiple(self, shapes_to_copy):
         """
         Duplica cada shape de la lista, las agrega al canvas y al panel
@@ -110,6 +119,18 @@ class MultiCopyPlugin:
         # Registrar en el panel de etiquetas de MainWindow
         for s in new_shapes:
             self.mw.add_label(s)
+
+        # Sincronizar selección en la lista lateral (QListWidget)
+        if hasattr(self.mw, "shape_selection_changed"):
+            self.mw.label_list.blockSignals(True)
+            self.mw.label_list.clearSelection()
+            for s in new_shapes:
+                if s in self.mw.shapes_to_items:
+                    self.mw.shapes_to_items[s].setSelected(True)
+            self.mw.label_list.blockSignals(False)
+            
+            # Forzar actualización de acciones habilitadas (copiar, borrar, etc.)
+            self.mw.shape_selection_changed(True)
 
         canvas.update()
         self.mw.set_dirty()

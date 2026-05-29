@@ -851,6 +851,8 @@ class MainWindow(QMainWindow, WindowMixin):
         self.actions.shapeFillColor.setEnabled(items_seleccionados)
 
     def add_label(self, shape):
+        if shape is None:
+            return
         shape.paint_label = self.display_label_option.isChecked()
         item = HashableQListWidgetItem(shape.label)
         item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
@@ -965,9 +967,16 @@ class MainWindow(QMainWindow, WindowMixin):
             return False
 
     def copy_selected_shape(self):
-        self.add_label(self.canvas.copy_selected_shape())
-        # fix copy and delete
-        self.shape_selection_changed(True)
+        # Dynamically dispatch if the method has been overridden/patched on the instance
+        func = self.__dict__.get('copy_selected_shape')
+        if func is not None:
+            return func()
+
+        copied_shape = self.canvas.copy_selected_shape()
+        if copied_shape is not None:
+            self.add_label(copied_shape)
+            # fix copy and delete
+            self.shape_selection_changed(True)
 
     def combo_selection_changed(self, index):
         text = self.combo_box.cb.itemText(index)

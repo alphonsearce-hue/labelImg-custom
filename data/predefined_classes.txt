@@ -1,8 +1,12 @@
 person
-chair
 car
+motorcycle
+bus
+truck
+fire hydrant
+chair
 table
-personas
-personas12
-prueba
-prueba21
+truck_pickup
+truck_delivery
+truck_heavy
+garbage_truck

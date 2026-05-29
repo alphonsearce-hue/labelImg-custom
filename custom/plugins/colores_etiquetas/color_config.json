@@ -1,8 +1,8 @@
 {
-    "mode": "unified",
+    "mode": "class",
     "theme": "sunset",
     "unified_hex": "#55aaff",
-    "custom_unified_enabled": true,
+    "custom_unified_enabled": false,
     "custom_class_colors_enabled": false,
     "hover_highlight_enabled": true,
     "hover_alpha": 90,
