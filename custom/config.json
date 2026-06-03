@@ -16,5 +16,6 @@
     "sincronizar_clases": true,
     "transformar_cajas": true,
     "visibilidad_clases": true,
-    "batch_label_delete": true
+    "batch_label_delete": true,
+    "file_search": true
 }
