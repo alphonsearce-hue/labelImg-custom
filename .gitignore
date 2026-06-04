@@ -44,3 +44,6 @@ tmp.*
 
 # Custom ignore
 visualizador nestle/
+custom/autosave_backup/last_stable_backup.json
+custom/autosave_backup/working_copy.json
+data/predefined_classes.txt

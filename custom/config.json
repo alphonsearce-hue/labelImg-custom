@@ -1,10 +1,14 @@
 {
+    "batch_label_delete": true,
+    "batch_label_edit": true,
     "colores_etiquetas": true,
     "contraste_lista": true,
     "cursor_precision": true,
+    "file_search": true,
     "gestor_plugins": true,
     "grosor_lineas": true,
     "historial": true,
+    "mejoras_ux": true,
     "multi_copy": true,
     "object_tracker": true,
     "propagar_etiquetas": true,
@@ -16,8 +20,5 @@
     "sincronizar_clases": true,
     "transformar_cajas": true,
     "visibilidad_clases": true,
-    "batch_label_delete": true,
-    "visualizador": false,
-    "file_search": true,
-    "mejoras_ux": true
+    "visualizador": true
 }
