@@ -1,0 +1,1 @@
+# visualizador plugin

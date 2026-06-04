@@ -17,5 +17,7 @@
     "transformar_cajas": true,
     "visibilidad_clases": true,
     "batch_label_delete": true,
-    "file_search": true
+    "visualizador": false,
+    "file_search": true,
+    "mejoras_ux": true
 }

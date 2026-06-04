@@ -64,7 +64,10 @@ class PluginLoader:
 
         for name in plugin_names:
             if name not in config:
-                config[name] = True
+                if name == "visualizador":
+                    config[name] = False
+                else:
+                    config[name] = True
 
             if not config[name]:
                 print(f"[Loader] Skipped: {name} (desactivado)")

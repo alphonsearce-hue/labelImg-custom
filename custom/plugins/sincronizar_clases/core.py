@@ -182,11 +182,23 @@ class ClassSyncPlugin:
         try:
             combo = self.main_window.default_label_combo_box
             cb = combo.cb
+            
+            current_text = cb.currentText()
+            
             cb.blockSignals(True)
             cb.clear()
             for c in classes:
                 cb.addItem(c)
-            cb.setCurrentIndex(0)
+                
+            index = cb.findText(current_text)
+            if index >= 0:
+                cb.setCurrentIndex(index)
+                self.main_window.default_label = current_text
+            else:
+                cb.setCurrentIndex(0)
+                if classes:
+                    self.main_window.default_label = classes[0]
+                    
             cb.blockSignals(False)
         except Exception as e:
             print(f"[ClassSync] Error actualizando combo: {e}")

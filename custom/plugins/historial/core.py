@@ -27,6 +27,7 @@ class HistoryManagerPlugin:
         self._restoring = False
         self._last_snapshot_key = None
         self._last_action_desc = "Inicio de sesión"
+        self._priority_desc = None  # Descripción de alta prioridad (no sobreescribible)
         self._shape_moved_connected = False
 
         self.capture_timer = QTimer()
@@ -84,11 +85,13 @@ class HistoryManagerPlugin:
         self.original_delete_selected = self.mw.delete_selected_shape
         self.original_new_shape = self.mw.new_shape
 
+        self.original_label_item_changed = self.mw.label_item_changed
+
         def wrapped_set_dirty(*args, **kwargs):
             result = self.original_set_dirty(*args, **kwargs)
             if not self._restoring:
-                # Si no hay una descripción pendiente, es un movimiento genérico
-                if not self.capture_timer.isActive():
+                # Solo asignar genérico si no hay descripción de alta prioridad activa
+                if not self.capture_timer.isActive() and self._priority_desc is None:
                     self._last_action_desc = "Cambio detectado"
                 self.capture_timer.start(120)
             return result
@@ -103,20 +106,36 @@ class HistoryManagerPlugin:
             return result
 
         def wrapped_delete_selected(*args, **kwargs):
+            self._priority_desc = "Eliminar cuadro"
             self._last_action_desc = "Eliminar cuadro"
-            self.original_delete_selected(*args, **kwargs)
+            self.original_delete_selected()
             self.mw.set_dirty() # Asegurar que se dispare el snapshot
 
         def wrapped_new_shape(*args, **kwargs):
+            self._priority_desc = "Crear cuadro"
             self._last_action_desc = "Crear cuadro"
             self.original_new_shape(*args, **kwargs)
             # set_dirty ya es llamado dentro de new_shape
+
+        def wrapped_label_item_changed(*args, **kwargs):
+            self._priority_desc = "Editar etiqueta"
+            self._last_action_desc = "Editar etiqueta"
+            self.original_label_item_changed(*args, **kwargs)
 
         # Inyectar parches
         self.mw.set_dirty = wrapped_set_dirty
         self.mw.load_file = wrapped_load_file
         self.mw.delete_selected_shape = wrapped_delete_selected
         self.mw.new_shape = wrapped_new_shape
+        self.mw.label_item_changed = wrapped_label_item_changed
+
+        if hasattr(self.mw, 'actions') and hasattr(self.mw.actions, 'delete'):
+            try:
+                self.mw.actions.delete.triggered.disconnect()
+                self.mw.actions.delete.triggered.connect(wrapped_delete_selected)
+            except Exception as e:
+                pass
+
 
         # Respaldo explícito: si hay movimiento/redimensión de caja,
         # marcamos acción específica y programamos captura.
@@ -204,7 +223,11 @@ class HistoryManagerPlugin:
             return
 
         state = self._snapshot()
-        if self.undo_stack and self._last_action_desc in ("Cambio detectado", "Mover/redimensionar cuadro"):
+
+        # Si hay una descripción de alta prioridad (acción específica), usarla directamente
+        if self._priority_desc is not None:
+            state["desc"] = self._priority_desc
+        elif self.undo_stack and self._last_action_desc in ("Cambio detectado", "Mover/redimensionar cuadro"):
             prev_shapes = self.undo_stack[-1].get("shapes", [])
             state["desc"] = self._infer_action_desc(prev_shapes, state["shapes"])
 
@@ -213,6 +236,8 @@ class HistoryManagerPlugin:
         key = json.dumps(data_only, sort_keys=True, separators=(",", ":"))
         
         if key == self._last_snapshot_key:
+            # Aunque las formas no cambiaron, limpiar la prioridad
+            self._priority_desc = None
             return
 
         self.undo_stack.append(state)
@@ -223,6 +248,9 @@ class HistoryManagerPlugin:
         self._last_snapshot_key = key
         self._refresh_history_ui()
         self._refresh_actions()
+        # Limpiar desc de prioridad y resetear descripción genérica para próxima acción
+        self._priority_desc = None
+        self._last_action_desc = "Cambio detectado"
 
     def _restore_state(self, state):
         if not state or state.get("file_path") != self.mw.file_path:
