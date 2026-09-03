@@ -20,5 +20,13 @@
     "sincronizar_clases": true,
     "transformar_cajas": true,
     "visibilidad_clases": true,
-    "visualizador": true
+    "visualizador": true,
+    "visualizador_opts": {
+        "hover_tooltip": true,
+        "selection_tooltip": true,
+        "smart_label": true,
+        "highlight_match": true,
+        "search_history": true,
+        "label_validation": true
+    }
 }

@@ -303,6 +303,8 @@ class _OptionsDialog(QDialog):
         btn_row.addWidget(btn_ok)
         layout.addLayout(btn_row)
 
+        
+
     def get_values(self) -> dict[str, bool]:
         return {k: cb.isChecked() for k, cb in self._checks.items()}
 
@@ -316,9 +318,16 @@ class ProductPanel(QDockWidget):
     def __init__(self, main_window, db: "CatalogDB",
                  tooltip_mgr: "HoverTooltipManager"):
         super().__init__("🔍 Visualizador de Productos", main_window)
+
+        self.setObjectName("product_panel_dock")
+
         self.mw          = main_window
         self.db          = db
         self.tooltip_mgr = tooltip_mgr
+
+        # Guarda la lista estática inicial de clases predefinidas
+        self._official_yolo_classes = list(getattr(self.mw, "label_hist", []))
+    
 
         # Opciones (activas por defecto)
         self._options: dict[str, bool] = {
@@ -342,10 +351,13 @@ class ProductPanel(QDockWidget):
             QDockWidget.DockWidgetFloatable |
             QDockWidget.DockWidgetClosable
         )
-        self.setMinimumWidth(320)
+        self.setMinimumWidth(180)
 
         self._build_ui()
         self._connect_signals()
+
+        self._load_options()
+        self._apply_options()
 
     # ── Construcción UI ───────────────────────────────────────────────────────
     def _build_ui(self) -> None:
@@ -364,6 +376,11 @@ class ProductPanel(QDockWidget):
             f"color:{_ACCENT_PINK}; font-size:14px; font-weight:bold;")
         hdr.addWidget(lbl_title)
         hdr.addStretch()
+
+        btn_add = QPushButton("🔄 Actualizar Catálogo")
+        btn_add.setObjectName("btn_apply")
+        btn_add.clicked.connect(self._open_update_catalog_dialog)
+        hdr.addWidget(btn_add)
 
         btn_opts = QPushButton("⚙️ Opciones")
         btn_opts.setObjectName("btn_options")
@@ -488,7 +505,17 @@ class ProductPanel(QDockWidget):
         self._bottom_status.setAlignment(Qt.AlignCenter)
         outer.addWidget(self._bottom_status)
 
-        self.setWidget(root)
+        # ─── ScrollArea contenedor principal ───────────────────────────────
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)  # Aparece SOLO cuando el panel es más estrecho que la cabecera
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)    # Muestra scroll vertical si el contenido alto no cabe
+
+        scroll.setStyleSheet(f"QScrollArea {{ border: none; background-color: {_DARK_BG}; }}")
+        scroll.setWidget(root)
+
+        self.setWidget(scroll)
 
     # ── Conexión de señales ───────────────────────────────────────────────────
     def _connect_signals(self) -> None:
@@ -507,12 +534,13 @@ class ProductPanel(QDockWidget):
         except Exception:
             pass
 
-        # Guardar: validación si está activa
+        # Guardar: validación según formato activo
         original_save = getattr(self.mw, "save_file", None)
         if original_save:
             def patched_save(*args, **kwargs):
                 if self._options.get("label_validation", True):
-                    self._validate_before_save()
+                    if not self._validate_before_save():
+                        return False  # Cancela la acción de guardar si el usuario presiona "No"
                 return original_save(*args, **kwargs)
             self.mw.save_file = patched_save
 
@@ -770,21 +798,45 @@ class ProductPanel(QDockWidget):
             upc = rows.iloc[0].get("upc_version", "")
             self._img_inner.set_images(self.db.get_images(upc, max_images=9))
 
-    def _validate_before_save(self) -> None:
-        """Valida todas las cajas de la imagen actual antes de guardar."""
-        bad_labels = []
-        for shape in self.mw.canvas.shapes:
-            label = shape.label or ""
-            if label and self.db.find_by_label(label).empty:
-                bad_labels.append(label)
+    def _validate_before_save(self) -> bool:
+        """
+        Valida que las etiquetas pertenezcan estrictamente a la lista predefinida oficial.
+        """
+        current_format = str(getattr(self.mw, "label_file_format", "")).upper()
 
-        if bad_labels:
-            msg = "\n".join(f"  • {l}" for l in set(bad_labels))
-            QMessageBox.warning(
-                self.mw, "⚠️ Etiquetas no encontradas en catálogo",
-                f"Las siguientes etiquetas no se encontraron:\n\n{msg}\n\n"
-                "Puedes guardar de todas formas, pero revísalas.",
-            )
+        if "YOLO" in current_format:
+            # Usa la lista inicial respaldada o intenta leer el archivo de clases predefinidas
+            official = set(getattr(self, "_official_yolo_classes", []))
+
+            # Si el respaldo estaba vacío, intenta cargar desde predefined_classes.txt
+            if not official and hasattr(self.mw, "label_hist"):
+                official = set(self.mw.label_hist)
+
+            unknown_classes = []
+            for shape in self.mw.canvas.shapes:
+                label = (shape.label or "").strip()
+                # Detecta cualquier clase que no estuviera en la lista original
+                if label and label not in official:
+                    unknown_classes.append(label)
+
+            if unknown_classes:
+                unique_bads = list(set(unknown_classes))
+                msg_list = "\n".join(f"  • {l}" for l in unique_bads[:5])
+                if len(unique_bads) > 5:
+                    msg_list += f"\n  ... y {len(unique_bads) - 5} más."
+
+                reply = QMessageBox.warning(
+                    self.mw,
+                    "⚠️ Alerta YOLO: Clase no permitida",
+                    f"Las siguientes etiquetas NO pertenecen a las clases oficiales:\n\n{msg_list}\n\n"
+                    f"⚠️ Guardar agregará estas líneas a 'classes.txt' y desincronizará tu dataset.\n\n"
+                    f"¿Deseas guardar de todas formas?",
+                    QMessageBox.Yes | QMessageBox.No,
+                    QMessageBox.No
+                )
+                return reply == QMessageBox.Yes
+
+        return True
 
     # ── Utilidades ────────────────────────────────────────────────────────────
     def _set_shape_label(self, shape, new_label: str) -> None:
@@ -879,7 +931,7 @@ class ProductPanel(QDockWidget):
             print(f"[Visualizador] No se pudo guardar opciones: {e}")
 
     def _load_options(self) -> None:
-        """Carga opciones guardadas previamente."""
+        #Carga opciones guardadas previamente.
         import json
         config_path = os.path.join(
             os.path.dirname(os.path.abspath(__file__)),
@@ -894,3 +946,74 @@ class ProductPanel(QDockWidget):
                 self._options.update(saved)
         except Exception as e:
             print(f"[Visualizador] No se pudo cargar opciones: {e}")
+    
+    def _open_add_product_dialog(self) -> None:
+        """Abre ventana para capturar nuevo producto y llamar a la BD."""
+        from PyQt5.QtWidgets import QInputDialog, QFileDialog, QMessageBox
+
+        upc, ok = QInputDialog.getText(self, "Nuevo Producto", "UPC (Código de barras):")
+        if not ok or not upc.strip():
+            return
+
+        nombre, ok = QInputDialog.getText(self, "Nuevo Producto", "Nombre completo del producto:")
+        if not ok or not nombre.strip():
+            return
+
+        cluster, ok = QInputDialog.getInt(self, "Nuevo Producto", "Cluster ID:", value=0, min=0)
+        if not ok:
+            return
+
+        # Seleccionar hasta 3 imágenes desde el explorador
+        files, _ = QFileDialog.getOpenFileNames(
+            self, "Selecciona hasta 3 imágenes del producto", "", "Imágenes (*.png *.jpg *.jpeg)"
+        )
+
+        try:
+            upc_ver = self.db.registrar_nuevo_producto(
+                upc_capturado=upc.strip(),
+                nombre=nombre.strip(),
+                cluster_id=cluster,
+                imagenes_paths=files
+            )
+            QMessageBox.information(self, "Éxito", f"Producto {upc_ver} registrado correctamente.")
+            # Refrescar búsqueda actual si aplica
+            self._do_search()
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"No se pudo guardar el producto: {e}")
+
+    def _open_update_catalog_dialog(self) -> None:
+        """Abre selectores de archivo/carpeta para actualizar el catálogo de forma masiva."""
+        from PyQt5.QtWidgets import QFileDialog, QMessageBox
+
+        # 1. Seleccionar el nuevo archivo CSV
+        csv_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "1/2 - Selecciona el nuevo archivo CSV",
+            "",
+            "Archivos CSV (*.csv)"
+        )
+        if not csv_path:
+            return  # Cancelado por el usuario
+
+        # 2. Seleccionar la carpeta que contiene las subcarpetas de imágenes (ej. dataset_catalogo_1575_skus)
+        img_dir = QFileDialog.getExistingDirectory(
+            self,
+            "2/2 - Selecciona la carpeta contenedora de las nuevas imágenes"
+        )
+        if not img_dir:
+            return  # Cancelado por el usuario
+
+        # 3. Procesar actualización
+        try:
+            total_skus, total_folders = self.db.actualizar_catalogo_masivo(csv_path, img_dir)
+            
+            QMessageBox.information(
+                self,
+                "Actualización Completada",
+                f"✅ Catálogo actualizado con éxito.\n\n"
+                f"• Total de productos en CSV: {total_skus}\n"
+                f"• Carpetas de imágenes integradas: {total_folders}"
+            )
+            self._clear_search()
+        except Exception as e:
+            QMessageBox.critical(self, "Error al actualizar", f"No se pudo actualizar el catálogo:\n{e}")

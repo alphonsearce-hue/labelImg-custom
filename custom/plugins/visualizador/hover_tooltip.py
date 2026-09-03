@@ -2,7 +2,7 @@
 # custom/plugins/visualizador/hover_tooltip.py
 # =============================================================================
 # Ventana flotante sin bordes que aparece al pasar el cursor sobre una caja
-# o al seleccionarla.  Muestra imagen(es) del producto + gramaje + nombre.
+# o al seleccionarla. Muestra imagen(es) del producto + gramaje + nombre + cluster.
 # =============================================================================
 
 from __future__ import annotations
@@ -37,8 +37,8 @@ class ProductTooltip(QWidget):
     """
 
     def __init__(self, parent=None):
-        super().__init__(parent, Qt.ToolTip | Qt.FramelessWindowHint |
-                         Qt.WindowStaysOnTopHint)
+        # 🟢 FIX BUG: Se remueve Qt.WindowStaysOnTopHint para evitar que la imagen se quede trabada sobre la interfaz
+        super().__init__(parent, Qt.ToolTip | Qt.FramelessWindowHint)
         self.setAttribute(Qt.WA_TranslucentBackground, False)
         self.setAttribute(Qt.WA_ShowWithoutActivating, True)
         self.setAutoFillBackground(True)
@@ -46,21 +46,27 @@ class ProductTooltip(QWidget):
         # Estilo del contenedor
         self.setStyleSheet("""
             ProductTooltip {
-                background-color: #1e1e2e;
+                background-color: #11111b;
                 border: 1px solid #45475a;
-                border-radius: 8px;
+                border-radius: 10px;
             }
             QLabel#title {
-                color: #cdd6f4;
-                font-size: 11px;
+                color: #ffffff;
+                font-size: 12px;
                 font-weight: bold;
-            }
-            QLabel#sub {
-                color: #a6adc8;
-                font-size: 10px;
             }
             QLabel#gramaje {
                 color: #a6e3a1;
+                font-size: 11px;
+                font-weight: bold;
+            }
+            QLabel#cluster {
+                color: #f9e2af;
+                font-size: 11px;
+                font-weight: bold;
+            }
+            QLabel#sku {
+                color: #89b4fa;
                 font-size: 11px;
                 font-weight: bold;
             }
@@ -68,7 +74,7 @@ class ProductTooltip(QWidget):
 
         self._outer = QVBoxLayout(self)
         self._outer.setContentsMargins(_MARGIN, _MARGIN, _MARGIN, _MARGIN)
-        self._outer.setSpacing(6)
+        self._outer.setSpacing(4)
 
         # Fila de imágenes
         self._img_grid = QGridLayout()
@@ -84,11 +90,15 @@ class ProductTooltip(QWidget):
         self._lbl_gramaje = QLabel()
         self._lbl_gramaje.setObjectName("gramaje")
 
-        self._lbl_sku     = QLabel()
-        self._lbl_sku.setObjectName("sub")
+        self._lbl_cluster = QLabel()
+        self._lbl_cluster.setObjectName("cluster")
+
+        self._lbl_sku = QLabel()
+        self._lbl_sku.setObjectName("sku")
 
         self._outer.addWidget(self._lbl_name)
         self._outer.addWidget(self._lbl_gramaje)
+        self._outer.addWidget(self._lbl_cluster)  # 🟢 NUEVO: Etiqueta de Cluster ID
         self._outer.addWidget(self._lbl_sku)
 
         # Mantener pixmaps referenciados para no ser recolectados
@@ -102,11 +112,6 @@ class ProductTooltip(QWidget):
         mode: str = "hover",          # "hover" | "selection"
         global_pos: QPoint | None = None,
     ) -> None:
-        """
-        Carga datos del producto y muestra el tooltip.
-        mode="hover"     → 1 imagen, tamaño pequeño
-        mode="selection" → hasta 3 imágenes, tamaño medio
-        """
         rows = db.find_by_label(label_text)
         if rows.empty:
             self.hide()
@@ -115,7 +120,6 @@ class ProductTooltip(QWidget):
         row = rows.iloc[0]
         upc = row.get("upc_version", "")
 
-        # Número de imágenes según modo
         max_imgs = 1 if mode == "hover" else 3
         img_paths = db.get_images(upc, max_images=max_imgs)
 
@@ -125,11 +129,14 @@ class ProductTooltip(QWidget):
         self.raise_()
 
     def _populate(self, row, img_paths: list[str], mode: str) -> None:
-        # Limpiar imágenes anteriores
+        # 🟢 FIX: Desvincular e inmediatamente remover del layout las imágenes anteriores
         for i in reversed(range(self._img_grid.count())):
             item = self._img_grid.itemAt(i)
             if item and item.widget():
-                item.widget().deleteLater()
+                w = item.widget()
+                self._img_grid.removeWidget(w)
+                w.setParent(None)
+                w.deleteLater()
         self._pixmaps.clear()
 
         tw = _HOVER_W if mode == "hover" else _SELECT_W
@@ -168,12 +175,16 @@ class ProductTooltip(QWidget):
         # Texto
         nombre  = str(row.get("nombre_capturado", ""))[:60]
         gramaje = str(row.get("gramaje", ""))
+        cluster = str(row.get("cluster_id", ""))
         sku     = str(row.get("sku_indice", ""))
 
         self._lbl_name.setText(nombre or "—")
         self._lbl_gramaje.setText(f"⚖ {gramaje}" if gramaje else "")
-        self._lbl_sku.setText(f"SKU índice: {sku}" if sku else "")
+        self._lbl_cluster.setText(f"🏷️ Cluster ID: {cluster}" if cluster else "")
+        self._lbl_sku.setText(f"📦 SKU índice: {sku}" if sku else "")
 
+        # 🟢 FIX: Forzar colapso de dimensiones para recalcular el ancho exacto
+        self.resize(1, 1)
         self.adjustSize()
 
     def _reposition(self, global_pos: QPoint | None) -> None:
@@ -184,10 +195,8 @@ class ProductTooltip(QWidget):
         x = global_pos.x() + 18
         y = global_pos.y() + 18
 
-        # Evitar salir por la derecha
         if x + self.width() > screen.right():
             x = global_pos.x() - self.width() - 8
-        # Evitar salir por abajo
         if y + self.height() > screen.bottom():
             y = global_pos.y() - self.height() - 8
 
@@ -197,12 +206,7 @@ class ProductTooltip(QWidget):
 # =============================================================================
 class HoverTooltipManager:
     """
-    Intercepta el mouseMoveEvent del canvas mediante monkey-patch y gestiona
-    el ciclo de vida del tooltip.
-
-    Modos independientes (toggleables):
-      - hover_enabled:     muestra 1 imagen al pasar el cursor
-      - selection_enabled: muestra 3 imágenes al seleccionar una caja
+    Intercepta eventos del canvas para gestionar el ciclo de vida del tooltip.
     """
 
     def __init__(self, main_window, db: "CatalogDB"):
@@ -214,26 +218,27 @@ class HoverTooltipManager:
         self.hover_enabled     = True
         self.selection_enabled = True
 
-        # Timer para el retardo del hover
         self._hover_timer = QTimer()
         self._hover_timer.setSingleShot(True)
         self._hover_timer.timeout.connect(self._on_hover_timer)
         self._pending_label: str | None = None
         self._pending_pos: QPoint | None = None
 
-        self._last_h_label: str | None = None   # etiqueta bajo el cursor
-        self._current_sel_label: str | None = None  # etiqueta seleccionada
+        self._last_h_label: str | None = None
+        self._current_sel_label: str | None = None
 
         self._install()
 
     # ── Instalación ───────────────────────────────────────────────────────────
     def _install(self) -> None:
-        """Monkey-patch del mouseMoveEvent y conexión con selectionChanged."""
         canvas = self.canvas
-        original_move = canvas.mouseMoveEvent
+        original_move  = canvas.mouseMoveEvent
+        original_press = canvas.mousePressEvent
+        original_leave = getattr(canvas, 'leaveEvent', None)
 
-        mgr = self  # capturar referencia
+        mgr = self
 
+        # 🟢 FIX BUG: Ocultar al mover el mouse fuera de cajas válidas
         def patched_move(ev):
             original_move(ev)
             if not mgr.hover_enabled:
@@ -249,13 +254,32 @@ class HoverTooltipManager:
             else:
                 mgr._last_h_label = None
                 mgr._hover_timer.stop()
-                # Ocultar solo si no está mostrando la selección activa
                 if mgr._current_sel_label is None:
                     mgr._tooltip.hide()
 
-        canvas.mouseMoveEvent = patched_move
+        # 🟢 FIX BUG: Ocultar si el mouse sale del lienzo (Canvas)
+        def patched_leave(ev):
+            if original_leave:
+                original_leave(ev)
+            mgr._last_h_label = None
+            mgr._pending_label = None
+            mgr._hover_timer.stop()
+            if mgr._current_sel_label is None:
+                mgr._tooltip.hide()
+
+        # 🟢 FIX BUG: Ocultar si se hace clic fuera de una caja
+        def patched_press(ev):
+            original_press(ev)
+            if canvas.selected_shape is None:
+                mgr._current_sel_label = None
+                mgr._tooltip.hide()
+            
+
+        canvas.mouseMoveEvent  = patched_move
+        canvas.mousePressEvent = patched_press
+        canvas.leaveEvent      = patched_leave
         
-        # Interceptar clear_selection porque selectionChanged(False) a veces no se emite
+        # Interceptar selección limpia
         if hasattr(canvas, 'clear_selection'):
             original_clear_selection = canvas.clear_selection
             def patched_clear_selection(*args, **kwargs):
@@ -265,31 +289,38 @@ class HoverTooltipManager:
                 mgr._tooltip.hide()
             canvas.clear_selection = patched_clear_selection
 
-        # Event filter para ocultar el tooltip si se cambia a otra aplicación
+        # 🟢 FIX BUG: Ocultar tooltip si se cambia de imagen en la lista de archivos
+        try:
+            if hasattr(self.mw, 'file_list_widget'):
+                self.mw.file_list_widget.itemSelectionChanged.connect(self._force_hide)
+        except Exception:
+            pass
+
+        # Event filter para ocultar si se minimiza o cambia de aplicación
         class FocusFilter(QObject):
             def eventFilter(self, obj, ev):
-                if ev.type() == QEvent.WindowDeactivate:
-                    if mgr._tooltip.isVisible():
-                        mgr._tooltip.hide()
-                        # Resetear estado para que vuelva a dispararse si regresan
-                        mgr._current_sel_label = None
-                        mgr._last_h_label = None
+                if ev.type() in (QEvent.WindowDeactivate, QEvent.FocusOut):
+                    mgr._force_hide()
                 return False
         
         self._focus_filter = FocusFilter()
         self.mw.installEventFilter(self._focus_filter)
 
-        # Conectar selectionChanged
         try:
             canvas.selectionChanged.connect(self._on_selection_changed)
         except Exception as e:
             print(f"[Visualizador] No se pudo conectar selectionChanged: {e}")
 
+    def _force_hide(self) -> None:
+        self._hover_timer.stop()
+        self._current_sel_label = None
+        self._last_h_label = None
+        self._tooltip.hide()
+
     # ── Slots ─────────────────────────────────────────────────────────────────
     def _on_hover_timer(self) -> None:
         if not self.hover_enabled or not self._pending_label:
             return
-        # No mostrar hover si ya hay tooltip de selección visible
         if self.selection_enabled and self._current_sel_label:
             return
         self._tooltip.show_for_label(
@@ -304,22 +335,18 @@ class HoverTooltipManager:
             return
 
         if not selected:
-            self._current_sel_label = None
-            self._last_h_label = None  # Resetear para que el hover vuelva a dispararse
-            self._tooltip.hide()
+            self._force_hide()
             return
 
         shape = self.canvas.selected_shape
         if shape is None:
-            self._current_sel_label = None
-            self._tooltip.hide()
+            self._force_hide()
             return
 
         label = shape.label or ""
         self._current_sel_label = label
         self._hover_timer.stop()
 
-        # Posición: esquina superior-derecha de la ventana principal
         geo = self.mw.geometry()
         global_pos = self.mw.mapToGlobal(
             QPoint(geo.width() // 2, geo.height() // 4)

@@ -137,10 +137,15 @@ class MultiSelectAreaPlugin:
         selected_class = None
 
         label_dialog = getattr(self.mw, "label_dialog", None)
+        
+        # Si existe el diálogo nativo de LabelImg, lo usamos
         if label_dialog and hasattr(label_dialog, "pop_up"):
             selected_class = label_dialog.pop_up(default_text)
-
-        if selected_class is None:
+            # Si el usuario presiona Cancel, salimos sin abrir otro diálogo
+            if selected_class is None:
+                return
+        else:
+            # Solo si NO existe label_dialog, usamos QInputDialog como alternativa
             labels = list(getattr(self.mw, "label_hist", []))
             if not labels:
                 labels = [shape.label for shape in self.canvas.shapes if shape.label]
@@ -156,12 +161,10 @@ class MultiSelectAreaPlugin:
                 0,
                 False,
             )
-            if not ok:
+            if not ok or not selected_class:
                 return
 
-        if not selected_class:
-            return
-
+        # Aplicar el cambio a todas las cajas seleccionadas
         items_to_shapes = getattr(self.mw, "items_to_shapes", None) or getattr(self.mw, "itemsToShapes", {})
         touched_items = []
         for shape in shapes:

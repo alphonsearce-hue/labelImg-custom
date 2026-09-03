@@ -1,10 +1,9 @@
 import os
 import shutil
-import json
 from PyQt5.QtWidgets import (QAction, QMenu, QDialog, QVBoxLayout, QHBoxLayout,
                              QLabel, QPushButton, QLineEdit, QCheckBox, 
                              QMessageBox, QListWidget, QTabWidget, QWidget, QFileDialog,
-                             QScrollArea, QFrame)
+                             QScrollArea, QRadioButton, QButtonGroup)
 from PyQt5.QtCore import Qt
 
 def setup(main_window):
@@ -42,7 +41,10 @@ class PropagacionDialog(QDialog):
         self.setWindowTitle("YOLO Dataset Assistant (Plugin Mode)")
         self.setMinimumSize(950, 650)
         self.selected_folder = ""
-        self.check_vars = {} # {str(idx): QCheckBox}
+        
+        # Diccionarios para los checkboxes
+        self.check_vars_estaticas = {} 
+        self.check_vars_dinamicas = {} 
         
         self._apply_styles()
         self._setup_ui()
@@ -62,9 +64,10 @@ class PropagacionDialog(QDialog):
             QPushButton:hover { border: 1px solid #7ed957; background-color: #232736; }
             QPushButton#MainAction { background-color: #1a1d2b; border: 2px solid #7ed957; border-radius: 6px; padding: 12px; font-size: 13px; }
             QPushButton#MainAction:hover { background-color: #7ed957; color: #0f111a; }
-            QCheckBox { color: #e0e0e0; spacing: 8px; }
-            QCheckBox::indicator { width: 18px; height: 18px; border-radius: 4px; border: 2px solid #2e3440; background-color: #1a1d2b; }
-            QCheckBox::indicator:checked { background-color: #7ed957; }
+            QCheckBox, QRadioButton { color: #e0e0e0; spacing: 8px; }
+            QCheckBox::indicator, QRadioButton::indicator { width: 18px; height: 18px; border-radius: 4px; border: 2px solid #2e3440; background-color: #1a1d2b; }
+            QCheckBox::indicator:checked, QRadioButton::indicator:checked { background-color: #7ed957; }
+            QRadioButton::indicator { border-radius: 9px; }
             QTabWidget::pane { border: 1px solid #2e3440; background-color: #0f111a; top: -1px; }
             QTabBar::tab { background-color: #1a1d2b; color: #888888; padding: 10px 20px; border-top-left-radius: 4px; border-top-right-radius: 4px; }
             QTabBar::tab:selected { background-color: #7ed957; color: #0f111a; font-weight: bold; }
@@ -91,7 +94,7 @@ class PropagacionDialog(QDialog):
         btn_select.clicked.connect(self._select_folder)
         side_layout.addWidget(btn_select)
 
-        side_layout.addWidget(QLabel("🔍 Buscar archivo:"))
+        side_layout.addWidget(QLabel("🔍 Buscar archivo (#12 = índice):"))
         self.txt_search = QLineEdit()
         self.txt_search.textChanged.connect(self._filter_files)
         side_layout.addWidget(self.txt_search)
@@ -99,7 +102,22 @@ class PropagacionDialog(QDialog):
         self.list_files = QListWidget()
         side_layout.addWidget(self.list_files)
 
-        side_layout.addWidget(QLabel("🔢 Frames a propagar:"))
+        # Opciones de propagación (Radio Buttons)
+        self.modo_group = QButtonGroup(self)
+        self.radio_frames = QRadioButton("Por cantidad de frames")
+        self.radio_indice = QRadioButton("Hasta índice")
+        self.radio_frames.setChecked(True)
+        self.modo_group.addButton(self.radio_frames)
+        self.modo_group.addButton(self.radio_indice)
+        
+        self.radio_frames.toggled.connect(self._actualizar_modo_ui)
+        self.radio_indice.toggled.connect(self._actualizar_modo_ui)
+
+        side_layout.addWidget(self.radio_frames)
+        side_layout.addWidget(self.radio_indice)
+
+        self.lbl_frames = QLabel("🔢 Frames a propagar:")
+        side_layout.addWidget(self.lbl_frames)
         self.txt_frames = QLineEdit(); self.txt_frames.setText("15")
         side_layout.addWidget(self.txt_frames)
 
@@ -113,7 +131,7 @@ class PropagacionDialog(QDialog):
         content_area = QWidget(); content_layout = QVBoxLayout(content_area)
         self.tabs = QTabWidget()
         
-        # TAB 1: Muebles/Clases
+        # TAB 1: Clases Estáticas
         self.tab_clases = QWidget(); clases_main_layout = QVBoxLayout(self.tab_clases)
         clases_main_layout.addWidget(QLabel("🏷️ Propagación de Clases Estáticas", objectName="TabTitle", alignment=Qt.AlignCenter))
         clases_main_layout.addWidget(QLabel("Selecciona las clases estáticas a propagar:\n(Las clases móviles están ocultas por seguridad)", alignment=Qt.AlignCenter))
@@ -131,31 +149,37 @@ class PropagacionDialog(QDialog):
         btn_prop_clases.clicked.connect(self._propagar_muebles)
         clases_main_layout.addWidget(btn_prop_clases)
         
-        # TAB 2: Personas (Inteligente)
-        self.tab_personas = QWidget(); personas_layout = QVBoxLayout(self.tab_personas)
-        personas_layout.addWidget(QLabel("👤 Propagación Inteligente", objectName="TabTitle", alignment=Qt.AlignCenter))
+        # TAB 2: Clases Dinámicas
+        self.tab_dinamicas = QWidget(); dinamicas_layout = QVBoxLayout(self.tab_dinamicas)
+        dinamicas_layout.addWidget(QLabel("🔄 Propagación de Clases Dinámicas (IoU)", objectName="TabTitle", alignment=Qt.AlignCenter))
+        dinamicas_layout.addWidget(QLabel("Selecciona clases con movimiento (personas, autos, etc.):", alignment=Qt.AlignCenter))
         
-        instrucciones = (
-            "Esta herramienta repara 'Falsos Negativos' en objetos con movimiento mínimo.\n\n"
-            "Compara el frame base con los siguientes. Si el modelo falló\n"
-            "en detectar a una persona, el asistente copiará automáticamente\n"
-            "la caja del frame base para rescatar la etiqueta."
-        )
-        lbl_inst = QLabel(instrucciones, alignment=Qt.AlignCenter)
-        lbl_inst.setStyleSheet("color: #888888; font-size: 12px; margin: 20px;")
-        personas_layout.addWidget(lbl_inst)
+        self.scroll_dinamicas = QScrollArea()
+        self.scroll_dinamicas.setWidgetResizable(True)
+        self.dinamicas_container = QWidget()
+        self.dinamicas_container.setObjectName("ClasesContainer")
+        self.dinamicas_layout = QVBoxLayout(self.dinamicas_container)
+        self.dinamicas_layout.setAlignment(Qt.AlignTop)
+        self.scroll_dinamicas.setWidget(self.dinamicas_container)
+        dinamicas_layout.addWidget(self.scroll_dinamicas)
         
-        personas_layout.addWidget(QLabel("⚙️ Umbral interno de solapamiento (IoU): 0.02", alignment=Qt.AlignCenter))
-        personas_layout.addStretch()
+        dinamicas_layout.addWidget(QLabel("⚙️ Umbral interno de solapamiento (IoU): 0.2", alignment=Qt.AlignCenter))
         
-        btn_prop_pers = QPushButton("👤 Propagar Personas (Rescate)", objectName="MainAction")
-        btn_prop_pers.clicked.connect(self._propagar_personas)
-        personas_layout.addWidget(btn_prop_pers)
+        btn_prop_dyn = QPushButton("🔄 Propagar Clases Dinámicas", objectName="MainAction")
+        btn_prop_dyn.clicked.connect(self._propagar_dinamicos)
+        dinamicas_layout.addWidget(btn_prop_dyn)
         
-        self.tabs.addTab(self.tab_clases, "Propagar Clases")
-        self.tabs.addTab(self.tab_personas, "Personas")
+        self.tabs.addTab(self.tab_clases, "Propagar Estáticos")
+        self.tabs.addTab(self.tab_dinamicas, "Dinámicos")
         content_layout.addWidget(self.tabs)
         main_layout.addWidget(content_area)
+
+    def _actualizar_modo_ui(self):
+        self.txt_frames.clear()
+        if self.radio_frames.isChecked():
+            self.lbl_frames.setText("🔢 Frames a propagar:")
+        else:
+            self.lbl_frames.setText("🔢 Índice destino:")
 
     def _select_folder(self):
         folder = QFileDialog.getExistingDirectory(self, "Seleccionar carpeta")
@@ -167,33 +191,57 @@ class PropagacionDialog(QDialog):
     def _load_files(self):
         self.list_files.clear()
         if self.selected_folder:
-            files = sorted([f for f in os.listdir(self.selected_folder) if f.lower().endswith(('.txt'))])
-            # Intentar cargar clases.txt si existe para actualizar checkboxes
+            files = sorted([f for f in os.listdir(self.selected_folder) if f.lower().endswith(('.txt')) and f.lower() != "classes.txt"])
             self._load_classes()
-            self.list_files.addItems(files)
+            
+            # Indexar visualmente la lista
+            for idx, f in enumerate(files):
+                self.list_files.addItem(f"[{idx+1:04d}] {f}")
 
     def _load_classes(self):
         # Limpiar anteriores
         for i in reversed(range(self.clases_layout.count())): 
             self.clases_layout.itemAt(i).widget().setParent(None)
-        self.check_vars.clear()
+        for i in reversed(range(self.dinamicas_layout.count())): 
+            self.dinamicas_layout.itemAt(i).widget().setParent(None)
+            
+        self.check_vars_estaticas.clear()
+        self.check_vars_dinamicas.clear()
 
         classes = getattr(self.mw, "label_hist", [])
         clases_ignoradas = ["persona", "person"]
         
         for i, name in enumerate(classes):
-            if name.lower() in clases_ignoradas: continue
-            cb = QCheckBox(f"[{i}] {name}")
-            self.check_vars[str(i)] = cb
-            self.clases_layout.addWidget(cb)
+            # Clases estáticas (ignorar personas)
+            if name.lower() not in clases_ignoradas:
+                cb_estatica = QCheckBox(f"[{i}] {name}")
+                self.check_vars_estaticas[str(i)] = cb_estatica
+                self.clases_layout.addWidget(cb_estatica)
+            
+            # Clases dinámicas (todas)
+            cb_dinamica = QCheckBox(f"[{i}] {name}")
+            self.check_vars_dinamicas[str(i)] = cb_dinamica
+            self.dinamicas_layout.addWidget(cb_dinamica)
 
     def _filter_files(self, text):
+        texto = text.lower().strip()
+        
+        # Búsqueda por índice
+        if texto.startswith("#"):
+            numero = texto[1:]
+            if numero.isdigit():
+                idx_buscar = int(numero.lstrip("0") or "1") - 1
+                for i in range(self.list_files.count()):
+                    item = self.list_files.item(i)
+                    item.setHidden(i != idx_buscar)
+            return
+
+        # Búsqueda normal
         for i in range(self.list_files.count()):
             item = self.list_files.item(i)
-            item.setHidden(text.lower() not in item.text().lower())
+            item.setHidden(texto not in item.text().lower())
 
     def _calcular_iou(self, box1, box2):
-        # box: [class, cx, cy, w, h]
         cx1, cy1, w1, h1 = map(float, box1[1:])
         cx2, cy2, w2, h2 = map(float, box2[1:])
         b1x1, b1y1, b1x2, b1y2 = cx1-w1/2, cy1-h1/2, cx1+w1/2, cy1+h1/2
@@ -204,81 +252,147 @@ class PropagacionDialog(QDialog):
         union_area = (w1*h1) + (w2*h2) - inter_area
         return inter_area / union_area if union_area > 0 else 0
 
+    def _obtener_archivo_real(self, list_item):
+        # Remueve el prefijo "[0001] " del texto del list widget
+        return list_item.text().split("] ", 1)[1]
+
+    def _calcular_fin(self, valor, indice_base, total_archivos):
+        if self.radio_frames.isChecked():
+            if valor <= 0: return None
+            return min(indice_base + valor, total_archivos - 1)
+        else:
+            indice_destino = valor - 1
+            if indice_destino <= indice_base:
+                QMessageBox.warning(self, "Atención", f"El índice destino ({valor}) debe ser mayor al actual ({indice_base + 1}).")
+                return None
+            return min(indice_destino, total_archivos - 1)
+
     def _propagar_muebles(self):
-        archivo_base = self.list_files.currentItem().text() if self.list_files.currentItem() else None
-        if not archivo_base: return QMessageBox.warning(self, "Atención", "Selecciona un archivo base en la lista.")
+        if not self.list_files.currentItem(): 
+            return QMessageBox.warning(self, "Atención", "Selecciona un archivo base en la lista.")
         
-        clases_seleccionadas = [idx for idx, cb in self.check_vars.items() if cb.isChecked()]
-        if not clases_seleccionadas: return QMessageBox.warning(self, "Atención", "No hay clases seleccionadas.")
+        archivo_base = self._obtener_archivo_real(self.list_files.currentItem())
+        clases_seleccionadas = [idx for idx, cb in self.check_vars_estaticas.items() if cb.isChecked()]
+        
+        if not clases_seleccionadas: 
+            return QMessageBox.warning(self, "Atención", "No hay clases estáticas seleccionadas.")
+        if not self.txt_frames.text().isdigit(): 
+            return QMessageBox.warning(self, "Error", "El valor debe ser numérico.")
         
         try:
-            frames = int(self.txt_frames.text())
+            valor = int(self.txt_frames.text())
+            all_files = [self._obtener_archivo_real(self.list_files.item(i)) for i in range(self.list_files.count())]
+            idx_base = all_files.index(archivo_base)
+            
+            fin = self._calcular_fin(valor, idx_base, len(all_files))
+            if fin is None: return
+            
             ruta_base = os.path.join(self.selected_folder, archivo_base)
             with open(ruta_base, "r") as f:
-                # Leemos y limpiamos todas las líneas del base
                 lineas_base = [l.strip() for l in f.readlines() if l.strip()]
-                # Filtramos solo las que queremos propagar
                 lineas_a_propagar = [l for l in lineas_base if l.split()[0] in clases_seleccionadas]
             
-            if not lineas_a_propagar: return QMessageBox.information(self, "Info", "El archivo base no tiene las clases seleccionadas.")
+            if not lineas_a_propagar: 
+                return QMessageBox.information(self, "Info", "El archivo base no tiene las clases seleccionadas.")
             
-            all_files = [self.list_files.item(i).text() for i in range(self.list_files.count())]
-            idx_base = all_files.index(archivo_base)
-            targets = all_files[idx_base+1 : idx_base+1+frames]
-            
+            targets = all_files[idx_base+1 : fin+1]
             procesados = 0
+            
+            # Backup Folder Logic
+            if self.cb_backup.isChecked():
+                carpeta_backup = os.path.join(self.selected_folder, "backup_etiquetas")
+                os.makedirs(carpeta_backup, exist_ok=True)
+            
             for name in targets:
                 path = os.path.join(self.selected_folder, name)
-                if self.cb_backup.isChecked(): shutil.copy2(path, path+".bak")
+                if self.cb_backup.isChecked():
+                    ruta_bak = os.path.join(carpeta_backup, name)
+                    if not os.path.exists(ruta_bak):
+                        shutil.copy2(path, ruta_bak)
                 
                 with open(path, "r") as f:
-                    # Leemos y limpiamos las líneas del archivo destino
                     lineas_target = [l.strip() for l in f.readlines() if l.strip()]
-                    # Mantenemos las que NO son de las clases que vamos a sobrescribir
                     finales = [l for l in lineas_target if l.split()[0] not in clases_seleccionadas]
                 
                 with open(path, "w") as f:
-                    # Unimos todo con saltos de línea limpios
                     contenido_final = "\n".join(finales + lineas_a_propagar)
                     if contenido_final:
                         f.write(contenido_final + "\n")
                 procesados += 1
-            QMessageBox.information(self, "Éxito", f"Clases propagadas en {procesados} archivos.")
+            QMessageBox.information(self, "Éxito", f"Clases estáticas propagadas en {procesados} archivos.")
         except Exception as e: QMessageBox.critical(self, "Error", str(e))
 
-    def _propagar_personas(self):
-        archivo_base = self.list_files.currentItem().text() if self.list_files.currentItem() else None
-        if not archivo_base: return
-        CLASE_PERSONA = "0" # Estándar YOLO
-        umbral_iou = 0.02
+    def _propagar_dinamicos(self):
+        if not self.list_files.currentItem(): 
+            return QMessageBox.warning(self, "Atención", "Selecciona un archivo base en la lista.")
+        
+        archivo_base = self._obtener_archivo_real(self.list_files.currentItem())
+        clases_dinamicas = [idx for idx, cb in self.check_vars_dinamicas.items() if cb.isChecked()]
+        clases_estaticas = [idx for idx, cb in self.check_vars_estaticas.items() if cb.isChecked()]
+        
+        # Validar intersección
+        interseccion = set(clases_dinamicas) & set(clases_estaticas)
+        if interseccion:
+            return QMessageBox.warning(self, "Error", "Una clase no puede ser estática y dinámica a la vez.")
+            
+        if not clases_dinamicas: 
+            return QMessageBox.warning(self, "Atención", "No seleccionaste clases dinámicas.")
+        if not self.txt_frames.text().isdigit(): 
+            return QMessageBox.warning(self, "Error", "El valor debe ser numérico.")
+            
+        umbral_iou = 0.2
         
         try:
-            frames = int(self.txt_frames.text())
+            valor = int(self.txt_frames.text())
+            all_files = [self._obtener_archivo_real(self.list_files.item(i)) for i in range(self.list_files.count())]
+            idx_base = all_files.index(archivo_base)
+            
+            fin = self._calcular_fin(valor, idx_base, len(all_files))
+            if fin is None: return
+            
             ruta_base = os.path.join(self.selected_folder, archivo_base)
             with open(ruta_base, "r") as f:
-                pers_base = [l.strip().split() for l in f.readlines() if l.strip() and l.strip().split()[0] == CLASE_PERSONA]
+                objetos_base = [l.strip() for l in f.readlines() if l.strip() and l.strip().split()[0] in clases_dinamicas]
             
-            if not pers_base: return QMessageBox.information(self, "Info", "No hay personas (ID 0) en el archivo base.")
+            if not objetos_base: 
+                return QMessageBox.information(self, "Info", "No hay objetos dinámicos seleccionados en el archivo base.")
             
-            all_files = [self.list_files.item(i).text() for i in range(self.list_files.count())]
-            idx_base = all_files.index(archivo_base)
-            targets = all_files[idx_base+1 : idx_base+1+frames]
-            
+            targets = all_files[idx_base+1 : fin+1]
             procesados = 0
+            
+            if self.cb_backup.isChecked():
+                carpeta_backup = os.path.join(self.selected_folder, "backup_etiquetas")
+                os.makedirs(carpeta_backup, exist_ok=True)
+            
             for name in targets:
                 path = os.path.join(self.selected_folder, name)
+                
+                if self.cb_backup.isChecked():
+                    ruta_bak = os.path.join(carpeta_backup, name)
+                    if not os.path.exists(ruta_bak):
+                        shutil.copy2(path, ruta_bak)
+                        
                 with open(path, "r") as f:
-                    lineas_target = [l.strip().split() for l in f.readlines() if l.strip()]
+                    lineas_actuales = [l.strip() for l in f.readlines() if l.strip()]
                 
-                otras = [" ".join(l)+"\n" for l in lineas_target if l[0] != CLASE_PERSONA]
-                pers_target = [l for l in lineas_target if l[0] == CLASE_PERSONA]
+                otras = [l for l in lineas_actuales if l.split()[0] not in clases_dinamicas]
+                actuales = [l for l in lineas_actuales if l.split()[0] in clases_dinamicas]
                 
-                finales_pers = [" ".join(l)+"\n" for l in pers_target]
-                for p_b in pers_base:
-                    if not any(self._calcular_iou(p_b, p_t) >= umbral_iou for p_t in pers_target):
-                        finales_pers.append(" ".join(p_b)+"\n")
+                finales = list(actuales)
                 
-                with open(path, "w") as f: f.writelines(otras + finales_pers)
+                for base in objetos_base:
+                    yolo_base = base.split()
+                    match = False
+                    for act in actuales:
+                        if self._calcular_iou(yolo_base, act.split()) >= umbral_iou:
+                            match = True
+                            break
+                    if not match:
+                        finales.append(base)
+                
+                with open(path, "w") as f: 
+                    f.writelines([f"{l}\n" for l in otras + finales])
                 procesados += 1
-            QMessageBox.information(self, "Éxito", f"Personas propagadas en {procesados} archivos.")
+                
+            QMessageBox.information(self, "Éxito", f"Clases dinámicas propagadas en {procesados} archivos.")
         except Exception as e: QMessageBox.critical(self, "Error", str(e))

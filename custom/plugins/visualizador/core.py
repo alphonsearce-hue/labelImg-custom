@@ -11,7 +11,7 @@
 from __future__ import annotations
 
 from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QAction, QPushButton
+from PyQt5.QtWidgets import QAction, QDockWidget, QPushButton
 
 from .catalog_db     import CatalogDB
 from .hover_tooltip  import HoverTooltipManager
@@ -34,7 +34,7 @@ def setup(main_window) -> "VisualizadorPlugin":
 # =============================================================================
 class VisualizadorPlugin:
     """
-    Orquestador del plugin.  Instancia los tres módulos y los conecta.
+    Orquestador del plugin. Instancia los tres módulos y los conecta.
     """
 
     def __init__(self, main_window):
@@ -50,13 +50,19 @@ class VisualizadorPlugin:
         # 3. Panel dock
         self.panel = ProductPanel(main_window, self.db, self.tooltip_mgr)
 
-        # Cargar opciones guardadas y aplicarlas
-        self.panel._load_options()
-        self.panel._apply_options()
+        # Cargar opciones guardadas si el objeto implementa los métodos
+        if hasattr(self.panel, "_load_options") and callable(self.panel._load_options):
+            self.panel._load_options()
+        if hasattr(self.panel, "_apply_options") and callable(self.panel._apply_options):
+            self.panel._apply_options()
 
-        # 4. Añadir el dock a la ventana principal (derecha) y ocultarlo por defecto
+        # 4. Añadir el dock a la ventana principal y tabularlo con el dock por defecto
+        main_window.product_dock = self.panel
         main_window.addDockWidget(Qt.RightDockWidgetArea, self.panel)
-        self.panel.hide()
+
+        if hasattr(main_window, "dock") and isinstance(main_window.dock, QDockWidget):
+            main_window.tabifyDockWidget(main_window.dock, self.panel)
+            main_window.dock.raise_()  # Mantiene activa la pestaña principal de etiquetas
 
         # 5. Registrar botón / acción en la UI de LabelImg
         self._register_ui()
@@ -73,13 +79,19 @@ class VisualizadorPlugin:
         """
         mw = self.mw
 
+        def _toggle_panel(show: bool):
+            if show:
+                self.panel.show()
+                self.panel.raise_()  # Selecciona la pestaña en primer plano
+            else:
+                self.panel.hide()
+
         # Acción de toggle del dock
         toggle_action = QAction("🔍 Visualizador de Productos", mw)
         toggle_action.setCheckable(True)
         toggle_action.setChecked(False)
-        toggle_action.triggered.connect(
-            lambda checked: self.panel.setVisible(checked)
-        )
+        toggle_action.triggered.connect(_toggle_panel)
+
         self.panel.visibilityChanged.connect(
             lambda vis: toggle_action.setChecked(vis)
         )
@@ -89,10 +101,10 @@ class VisualizadorPlugin:
             mw.register_plugin_tool(
                 "view_tools",
                 "🔍 Visualizador de Productos",
-                lambda: self.panel.setVisible(not self.panel.isVisible()),
+                lambda: _toggle_panel(not self.panel.isVisible()),
             )
 
-        # Método alternativo: menu_plugins
+        # Método alternativo: menu_plugins / register_plugin_action
         if hasattr(mw, "register_plugin_action"):
             mw.register_plugin_action("Vista", toggle_action)
         elif hasattr(mw, "menu_plugins"):
@@ -141,7 +153,11 @@ class VisualizadorPlugin:
 
         def _toggle():
             vis = not self.panel.isVisible()
-            self.panel.setVisible(vis)
+            if vis:
+                self.panel.show()
+                self.panel.raise_()
+            else:
+                self.panel.hide()
             btn.setChecked(vis)
 
         btn.clicked.connect(_toggle)

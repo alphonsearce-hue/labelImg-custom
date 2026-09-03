@@ -1,0 +1,6 @@
+person
+chair
+car
+table
+sku
+shelf

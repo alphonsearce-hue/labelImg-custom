@@ -9,6 +9,7 @@ import json
 import os
 import pkgutil
 import time
+import traceback
 
 
 class PluginLoader:
@@ -30,11 +31,11 @@ class PluginLoader:
                 print(f"[Loader] Warning: {plugin_name} no tiene función setup()")
         except Exception as e:
             print(f"[Loader] Error cargando {plugin_name}: {e}")
+            traceback.print_exc()  # Muestra el rastreo completo para depurar Qt
 
     @staticmethod
     def load_all(main_window):
         """Descubre e inicializa plugins desde custom/plugins/."""
-        # Usar ruta absoluta basada en este archivo
         base_dir = os.path.dirname(os.path.abspath(__file__))
         plugins_dir = os.path.join(base_dir, "plugins")
         config_path = os.path.join(base_dir, "config.json")
@@ -43,10 +44,10 @@ class PluginLoader:
         config = {}
         if os.path.exists(config_path):
             try:
-                with open(config_path, "r") as f:
+                with open(config_path, "r", encoding="utf-8") as f:
                     config = json.load(f)
-            except:
-                pass
+            except Exception as err:
+                print(f"[Loader] Error al leer config.json: {err}")
 
         print("--- Cargando Plugins ---")
 
@@ -63,11 +64,9 @@ class PluginLoader:
             plugin_names.remove(plugin_manager_name)
 
         for name in plugin_names:
+            # Habilitar todos los plugins por defecto (incluyendo visualizador)
             if name not in config:
-                if name == "visualizador":
-                    config[name] = False
-                else:
-                    config[name] = True
+                config[name] = True
 
             if not config[name]:
                 print(f"[Loader] Skipped: {name} (desactivado)")
@@ -77,10 +76,14 @@ class PluginLoader:
 
         # Guardar configuración actualizada
         try:
-            with open(config_path, "w") as f:
+            with open(config_path, "w", encoding="utf-8") as f:
                 json.dump(config, f, indent=4)
-        except:
-            pass
+        except Exception as err:
+            print(f"[Loader] Error al guardar config.json: {err}")
+
+        # Notificar a MainWindow que los plugins terminaron de cargarse
+        if hasattr(main_window, "on_plugins_loaded") and callable(main_window.on_plugins_loaded):
+            main_window.on_plugins_loaded()
 
         print("------------------------")
 
@@ -89,12 +92,7 @@ class PluginLoader:
 
     @staticmethod
     def _install_profiler(main_window):
-        """
-        Activa trazas de rendimiento en consola.
-        Uso (PowerShell):
-            $env:LABELIMG_PROFILE="1"
-            python labelImg.py
-        """
+        """Activa trazas de rendimiento en consola."""
         threshold_ms = float(os.environ.get("LABELIMG_PROFILE_MS", "5"))
 
         def wrap(method_name):
@@ -122,4 +120,4 @@ class PluginLoader:
         for name in ("load_file", "load_labels", "update_combo_box", "paint_canvas", "show_bounding_box_from_annotation_file"):
             wrap(name)
 
-        print("[PERF] Profiler activo. Cambia de imagen y revisa tiempos en consola.")
+        print("[PERF] Profiler activo.")

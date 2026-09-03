@@ -164,13 +164,10 @@ class Canvas(QWidget):
             return
 
         # Polygon copy moving.
+        # Arrastre con clic derecho (sin caja fantasma)
         if Qt.RightButton & ev.buttons():
-            if self.selected_shape_copy and self.prev_point:
-                self.override_cursor(CURSOR_MOVE)
-                self.bounded_move_shape(self.selected_shape_copy, pos)
-                self.repaint()
-            elif self.selected_shape:
-                self.selected_shape_copy = self.selected_shape.copy()
+            if self.selected_shape_copy:
+                self.selected_shape_copy = None
                 self.repaint()
             return
 
@@ -261,8 +258,6 @@ class Canvas(QWidget):
         pos = self.transform_pos(ev.pos())
 
         if ev.button() == Qt.LeftButton:
-            pos = self.transform_pos(ev.pos())
-
             multi_select = ev.modifiers() & Qt.ControlModifier
 
             if self.drawing():
@@ -277,15 +272,23 @@ class Canvas(QWidget):
 
             self.update()
 
+        elif ev.button() == Qt.RightButton:
+            # 🛑 REGISTRAR PUNTO INICIAL Y LIMPIAR FANTASMA PREVIO
+            self.prev_point = pos
+            if self.selected_shape_copy:
+                self.selected_shape_copy = None
+                self.update()
+
     def mouseReleaseEvent(self, ev):
         if ev.button() == Qt.RightButton:
-            menu = self.menus[bool(self.selected_shape_copy)]
             self.restore_cursor()
-            if not menu.exec_(self.mapToGlobal(ev.pos()))\
-               and self.selected_shape_copy:
-                # Cancel the move by deleting the shadow copy.
-                self.selected_shape_copy = None
-                self.repaint()
+            self.selected_shape_copy = None
+            
+            # Abre siempre el menú contextual principal (índice 0)
+            menu = self.menus[0]
+            menu.exec_(self.mapToGlobal(ev.pos()))
+            self.update()
+
         elif ev.button() == Qt.LeftButton and self.selected_shape:
             if self.selected_vertex():
                 self.override_cursor(CURSOR_POINT)
@@ -479,27 +482,30 @@ class Canvas(QWidget):
     def bounded_move_shape(self, shape, pos):
         if self.out_of_pixmap(pos):
             return False
-        
-        # Lógica de límites simplificada para el grupo
+
         dp = pos - self.prev_point
         if dp:
-            # Mover todos los seleccionados (soporte para plugin mass_edit)
-            shapes_to_move = getattr(self, 'selected_shapes', [])
-            if not shapes_to_move and shape:
-                shapes_to_move = [shape]
-            
-            for s in shapes_to_move:
-                s.move_by(dp)
-            
+            # Si es la copia fantasma (clic derecho), solo movemos la sombra
+            if shape == self.selected_shape_copy:
+                shape.move_by(dp)
+            else:
+                # Si es un arrastre normal (clic izquierdo), movemos la selección real
+                shapes_to_move = getattr(self, 'selected_shapes', [])
+                if not shapes_to_move and shape:
+                    shapes_to_move = [shape]
+
+                for s in shapes_to_move:
+                    s.move_by(dp)
+
             self.prev_point = pos
             return True
-        return False
         return False
 
     def de_select_shape(self):
         if self.selected_shape:
             self.selected_shape.selected = False
             self.selected_shape = None
+            self.selected_shape_copy = None  # 🛑 Limpia el fantasma
             self.set_hiding(False)
             self.selectionChanged.emit(False)
             self.update()
@@ -510,6 +516,7 @@ class Canvas(QWidget):
 
         self.selected_shapes = []
         self.selected_shape = None
+        self.selected_shape_copy = None  # 🛑 Limpia el fantasma
 
         self.update()
 

@@ -13,6 +13,7 @@ from functools import partial
 from PyQt5.QtGui import *
 from PyQt5.QtCore import *
 from PyQt5.QtWidgets import *
+from PyQt5.QtWidgets import QApplication
 
 # --- CONFIGURACIÓN DE RUTAS PARA EJECUTABLE (.EXE) ---
 if getattr(sys, 'frozen', False):
@@ -156,11 +157,27 @@ class MainWindow(QMainWindow, WindowMixin):
         # Create and add a widget for showing current label items
         self.label_list = QListWidget()
         self.label_list.setSelectionMode(QAbstractItemView.ExtendedSelection)
+
+        # ─── AJUSTE RESPONSIVO ──────────────────────────────────────
+        self.label_list.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+
         label_list_container = QWidget()
         label_list_container.setLayout(list_layout)
+
+        # Obliga a los botones y desplegables a abarcar el 100% del ancho del panel
+        label_list_container.setStyleSheet("""
+            QPushButton, QToolButton, QComboBox {
+                width: 100%;
+                min-height: 28px;
+            }
+        """)
+        # ───────────────────────────────────────────────────────────────────
+
+        # Eventos
         self.label_list.itemActivated.connect(self.label_selection_changed)
         self.label_list.itemSelectionChanged.connect(self.label_selection_changed)
         self.label_list.itemDoubleClicked.connect(self.edit_label)
+
         # Connect to itemChanged to detect checkbox changes.
         self.label_list.itemChanged.connect(self.label_item_changed)
         list_layout.addWidget(self.label_list)
@@ -168,7 +185,7 @@ class MainWindow(QMainWindow, WindowMixin):
 
 
         self.dock = QDockWidget(get_str('boxLabelText'), self)
-        self.dock.setObjectName(get_str('labels'))
+        self.dock.setObjectName('BoxLabelDock')
         self.dock.setWidget(label_list_container)
 
         self.file_list_widget = QListWidget()
@@ -179,7 +196,7 @@ class MainWindow(QMainWindow, WindowMixin):
         file_list_container = QWidget()
         file_list_container.setLayout(file_list_layout)
         self.file_dock = QDockWidget(get_str('fileList'), self)
-        self.file_dock.setObjectName(get_str('files'))
+        self.file_dock.setObjectName('FileListDock')
         self.file_dock.setWidget(file_list_container)
 
         self.zoom_widget = ZoomWidget()
@@ -209,10 +226,30 @@ class MainWindow(QMainWindow, WindowMixin):
         self.setCentralWidget(scroll)
         self.addDockWidget(Qt.RightDockWidgetArea, self.dock)
         self.addDockWidget(Qt.RightDockWidgetArea, self.file_dock)
+
+        # ─── FUSIONAR EN PESTAÑAS Y DISEÑO ADAPTATIVO ───────────────────────
+        self.tabifyDockWidget(self.dock, self.file_dock)
+        self.dock.raise_()  # Mantiene 'self.dock' visible en primer plano al iniciar
+
         self.file_dock.setFeatures(QDockWidget.DockWidgetFloatable)
 
         self.dock_features = QDockWidget.DockWidgetClosable | QDockWidget.DockWidgetFloatable
         self.dock.setFeatures(self.dock.features() ^ self.dock_features)
+
+        SIDEBAR_MAX_WIDTH = 260  # Ancho compacto ideal para pantallas pequeñas
+
+        # Corrección: Usar self.dock en lugar de self.label_dock
+        #self.dock.setMaximumWidth(SIDEBAR_MAX_WIDTH)
+        #if hasattr(self, 'product_dock'):
+        #    self.product_dock.setMaximumWidth(SIDEBAR_MAX_WIDTH)
+
+        screen = QApplication.primaryScreen().geometry()
+
+        # Ajuste para pantallas HD o menores (<= 768p)
+        if screen.height() <= 768:
+            if hasattr(self, 'product_dock'):
+                self.tabifyDockWidget(self.dock, self.product_dock)
+            self.dock.setMaximumWidth(240)
 
         # Actions
         action = partial(new_action, self)
@@ -483,16 +520,24 @@ class MainWindow(QMainWindow, WindowMixin):
             else:
                 self.recent_files = recent_file_qstring_list = settings.get(SETTING_RECENT_FILES)
 
-        size = settings.get(SETTING_WIN_SIZE, QSize(600, 500))
-        position = QPoint(0, 0)
-        saved_position = settings.get(SETTING_WIN_POSE, position)
-        # Fix the multiple monitors issue
-        for i in range(QApplication.desktop().screenCount()):
-            if QApplication.desktop().availableGeometry(i).contains(saved_position):
-                position = saved_position
-                break
-        self.resize(size)
-        self.move(position)
+        # Si existe una geometría guardada la restaura; si es el primer inicio usa el valor original
+        if settings.get('window/geometry'):
+            self.restoreGeometry(settings.get('window/geometry'))
+        else:
+            size = settings.get(SETTING_WIN_SIZE, QSize(600, 500))
+            position = QPoint(0, 0)
+            saved_position = settings.get(SETTING_WIN_POSE, position)
+            for i in range(QApplication.desktop().screenCount()):
+                if QApplication.desktop().availableGeometry(i).contains(saved_position):
+                    position = saved_position
+                    break
+            self.resize(size)
+            self.move(position)
+
+        # Restaurar disposición interna de los paneles (docks)
+        if settings.get(SETTING_WIN_STATE):
+            self.restoreState(settings.get(SETTING_WIN_STATE))
+
         save_dir = ustr(settings.get(SETTING_SAVE_DIR, None))
         self.last_open_dir = ustr(settings.get(SETTING_LAST_OPEN_DIR, None))
         if self.default_save_dir is None and save_dir is not None and os.path.exists(save_dir):
@@ -548,8 +593,18 @@ class MainWindow(QMainWindow, WindowMixin):
         try:
             from custom.loader import PluginLoader
             PluginLoader.load_all(self)
+
+            # --- CORRECCIÓN DE VENTANA FLOTANTE ---
+            # Si el plugin instanció 'product_dock', lo anclamos e integramos en pestañas
+            if hasattr(self, 'product_dock') and isinstance(self.product_dock, QDockWidget):
+                self.addDockWidget(Qt.RightDockWidgetArea, self.product_dock)
+                self.tabifyDockWidget(self.dock, self.product_dock)
+                self.dock.raise_()  # Mantiene la pestaña de etiquetas en primer plano
         except Exception as _plugin_error:
             print(f"[Plugins] No se pudo inicializar el sistema de plugins: {_plugin_error}")
+
+        # Al final del __init__ de MainWindow en labelimg.py
+        self.official_yolo_classes = set(self.label_hist)    
 
     def keyReleaseEvent(self, event):
         if event.key() == Qt.Key_Control:
@@ -762,30 +817,27 @@ class MainWindow(QMainWindow, WindowMixin):
         self.menus.labelList.exec_(self.label_list.mapToGlobal(point))
 
     def edit_label(self):
-            if not self.canvas.editing():
-                return
-            item = self.current_item()
-            if not item:
-                return
-            
-            # Muestra el diálogo para escribir el nuevo nombre de la clase
-            text = self.label_dialog.pop_up(item.text())
-            
-            if text is not None:
-                # --- MODIFICACIÓN: Iterar sobre todos los elementos seleccionados ---
-                for selected_item in self.label_list.selectedItems():
-                    selected_item.setText(text)
-                    selected_item.setBackground(generate_color_by_text(text))
-                    
-                    # Actualizar también la figura (shape) correspondiente en el lienzo
-                    shape = self.items_to_shapes[selected_item]
-                    shape.label = text
-                    shape.line_color = generate_color_by_text(text)
-                    shape.fill_color = generate_color_by_text(text)
-                # --------------------------------------------------------------------
+        if not self.canvas.editing():
+            return
+        item = self.current_item()
+        if not item:
+            return
+        
+        # Muestra el diálogo para escribir el nuevo nombre de la clase
+        text = self.label_dialog.pop_up(item.text())
+        
+        if text is not None:
+            for selected_item in self.label_list.selectedItems():
+                selected_item.setText(text)
+                selected_item.setBackground(generate_color_by_text(text))
                 
-                self.set_dirty()
-                self.update_combo_box()
+                shape = self.items_to_shapes[selected_item]
+                shape.label = text
+                shape.line_color = generate_color_by_text(text)
+                shape.fill_color = generate_color_by_text(text)
+            
+            self.set_dirty()
+            self.update_combo_box()
 
     # Tzutalin 20160906 : Add file list and dock to move faster
     def file_item_double_clicked(self, item=None):
@@ -881,9 +933,17 @@ class MainWindow(QMainWindow, WindowMixin):
     def load_labels(self, shapes):
         self._bulk_loading_labels = True
         s = []
+
         try:
             for label, points, line_color, fill_color, difficult in shapes:
+
+                # Evitar errores cuando la etiqueta es None o está vacía
+                if not label:
+                    print("[WARN] Etiqueta vacía encontrada. Usando 'unknown'.")
+                    label = "unknown"
+
                 shape = Shape(label=label)
+
                 for x, y in points:
 
                     # Ensure the labels are within the bounds of the image. If not, fix them.
@@ -892,6 +952,7 @@ class MainWindow(QMainWindow, WindowMixin):
                         self.set_dirty()
 
                     shape.add_point(QPointF(x, y))
+
                 shape.difficult = difficult
                 shape.close()
                 s.append(shape)
@@ -907,6 +968,7 @@ class MainWindow(QMainWindow, WindowMixin):
                     shape.fill_color = generate_color_by_text(label)
 
                 self.add_label(shape)
+
         finally:
             self._bulk_loading_labels = False
 
@@ -1335,9 +1397,10 @@ class MainWindow(QMainWindow, WindowMixin):
         else:
             settings[SETTING_FILENAME] = ''
 
-        settings[SETTING_WIN_SIZE] = self.size()
-        settings[SETTING_WIN_POSE] = self.pos()
+        # Guardar posición/tamaño de ventana y distribución de paneles
+        settings['window/geometry'] = self.saveGeometry()
         settings[SETTING_WIN_STATE] = self.saveState()
+
         settings[SETTING_LINE_COLOR] = self.line_color
         settings[SETTING_FILL_COLOR] = self.fill_color
         settings[SETTING_RECENT_FILES] = self.recent_files
@@ -1549,6 +1612,8 @@ class MainWindow(QMainWindow, WindowMixin):
             self.load_file(filename)
 
     def save_file(self, _value=False):
+        if not self.validate_yolo_classes():
+            return False
         if self.default_save_dir is not None and len(ustr(self.default_save_dir)):
             if self.file_path:
                 image_file_name = os.path.basename(self.file_path)
@@ -1758,6 +1823,40 @@ class MainWindow(QMainWindow, WindowMixin):
     def toggle_draw_square(self):
         self.canvas.set_drawing_shape_to_square(self.draw_squares_option.isChecked())
 
+    def validate_yolo_classes(self):
+        """Bloquea el guardado si hay etiquetas que no estén en predefined_classes.txt"""
+        # Verifica si el formato actual es YOLO
+        if getattr(self, "label_file_format", None) == LabelFileFormat.YOLO:
+            official = getattr(self, "official_yolo_classes", set())
+            
+            if not official:
+                return True
+
+            unknown_classes = []
+            for shape in self.canvas.shapes:
+                label = (shape.label or "").strip()
+                if label and label not in official:
+                    unknown_classes.append(label)
+
+            if unknown_classes:
+                unique_bads = list(set(unknown_classes))
+                msg_list = "\n".join(f"  • {l}" for l in unique_bads[:5])
+                if len(unique_bads) > 5:
+                    msg_list += f"\n  ... y {len(unique_bads) - 5} más."
+
+                reply = QMessageBox.warning(
+                    self,
+                    "⚠️ Clase no permitida en YOLO",
+                    f"Las siguientes etiquetas NO pertenecen a tus clases oficiales:\n\n{msg_list}\n\n"
+                    f"⚠️ Guardar las escribirá en 'classes.txt' y alterará tu dataset.\n\n"
+                    f"¿Deseas guardar de todas formas?",
+                    QMessageBox.Yes | QMessageBox.No,
+                    QMessageBox.No
+                )
+                return reply == QMessageBox.Yes
+
+        return True    
+
 def inverted(color):
     return QColor(*[255 - v for v in color.getRgb()])
 
@@ -1800,6 +1899,8 @@ def get_main_app(argv=None):
                      args.save_dir)
     win.show()
     return app, win
+
+
 
 
 def main():
